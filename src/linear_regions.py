@@ -109,11 +109,16 @@ class RegionForest:
     def __init__(self, roots):
         self.roots = roots
 
-    def all_final_ts(self):
-        ts = {}
-        self._all_final_ts(self.roots, ts)
-        return ts
+    def all_final_regions(self):
+        final_regions = []
+        self._all_final_regions(self.roots, final_regions)
+        return FinalRegionSet(final_regions)
 
+    def get_n_correct_and_incorrect(self, n):
+        corr = []
+        incorr = []
+        self._get_n_correct_and_incorrect(self.roots, n, corr, incorr)
+        return FinalRegionSet(corr), FinalRegionSet(incorr)
 
     def get_frequency_each_region(self, at_layer):
         num_pred_map = {}
@@ -121,15 +126,25 @@ class RegionForest:
         num_pred_map[1] = FreqTracker()
         return num_pred_map
 
-    def _all_final_ts(self, regions, ts):
+    def _all_final_regions(self, regions, final_regions):
         for key, T in regions.iteritems():
             if isinstance(T, FinalRegion):
-                if key in ts:
-                    ts[key] += 1
-                else:
-                    ts[key] = 1
+                final_regions.append(T)
             else:
-                self._all_final_ts(T.sub_regions, ts)
+                self._all_final_regions(T.sub_regions, final_regions)
+
+    def _get_n_correct_and_incorrect(self, regions, n, corr, incorr):
+        if len(corr) >= n and len(incorr) >=n:
+            return
+        for key, T in regions.iteritems():
+            if isinstance(T, FinalRegion):
+                if len(corr) < n and T.has_correct_pred():
+                    corr.append(T)
+                if len(incorr) < n and T.has_inc_pred():
+                    incorr.append(T)
+            else:
+                self._get_n_correct_and_incorrect(T.sub_regions, n, corr, incorr)
+
 
 
     def _get_frequency_each_region(self, regions, num_pred_map, l, at_layer):
@@ -143,7 +158,7 @@ class RegionForest:
     def _update_freq(self, T, num_pred_map):
         cor, inc = T.num_predictions()
         num_pred = cor + inc
-        is_pure = T.is_pure()
+        is_pure, _ = T.is_pure()
         if num_pred in num_pred_map.keys():
             freq_tracker = num_pred_map[num_pred]
         else:
@@ -156,6 +171,22 @@ class RegionForest:
 
 
 
+
+class FinalRegionSet:
+    """Class representing all the final regions for a given RegionForest.
+    
+    It's properties are a list of all the final regions, as well as a numpy
+    array with corresponding indicies, which contains the tuple set T for
+    each region. For each region, this tuple set T is concatenated in a
+    single numpy array."""
+
+    def __init__(self, final_regions, Ts=None):
+        self.final_regions = final_regions
+        if Ts is None:
+            Ts = map(lambda reg: reg.concatenated_T(), final_regions)
+            self.Ts = np.array(Ts)
+        else:
+            self.Ts = Ts
 
 class Region:
     """Data structure representing a linear region at a given layer"""
@@ -179,7 +210,16 @@ class Region:
         return True
 
     def __ne__(self, other):
-        return not self.__eq__(self, other)
+        return not self.__eq__(other)
+
+    def __str__(self):
+        ts = []
+        reg = self
+        while reg is not None:
+            ts.append(reg.t.tolist())
+            reg = reg.super_region
+        ts = list(reversed(ts))
+        return str(ts)
 
     def num_predictions(self):
         tot_corr, tot_inc = 0, 0
@@ -201,13 +241,27 @@ class Region:
         for _, T in self.sub_regions.iteritems():
             is_pure, target = T.is_pure()
             if not is_pure:
-                return False
+                return False, None
             if first:
                 first = False
                 targ = target
             elif targ != target:
-                return False
+                return False, None
         return True, target
+
+    def concatenated_T(self):
+        """Concatenate the set of binary tuples that describe this region
+        and return the result:
+        
+        :return The binary tuples, concatenated to form a single numpy array"""
+        ts = []
+        current_reg = self
+        while current_reg is not None:
+            ts.append(current_reg.t)
+            current_reg = current_reg.super_region
+        ts = list(reversed(ts))
+        as_array = np.concatenate(ts)
+        return as_array
 
 
 class FinalRegion(Region):
@@ -224,12 +278,24 @@ class FinalRegion(Region):
     def get_predictions(self):
         return self.predictions
 
+    def has_correct_pred(self):
+        return any(map(lambda p: p.is_correct(), self.predictions))
+
+    def has_inc_pred(self):
+        return any(map(lambda p: not p.is_correct(), self.predictions))
+
     def is_pure(self):
         target = self.predictions[0].target
         for pred in self.predictions:
             if pred.target != target:
-                return False
+                return False, None
         return True, target
+
+    def _true_for(self, predicate):
+        for pred in self.predictions:
+            if predicate(pred):
+                return True
+        return False
 
 class Prediction:
 

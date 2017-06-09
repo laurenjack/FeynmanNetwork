@@ -52,9 +52,28 @@ def train_and_report(network, X, Y, conf):
         a, Ts = sess.run(feed_forward, feed_dict=feed_dict)
         rsb.putRegion(Ts, np.argmax(y, axis=1), np.argmax(a, axis=1))
         print "Sample: "+str(k)+" complete"
+    return rsb.get_forest(), sess
+
+
+def report(trained_network, X, Y, conf, sess):
+    # Report on the number of linear regions
+    n = X.shape[0]
+    m = conf.m
+    feed_forward = trained_network.feed_forward()
+    batch_indicies = _create_batch_indicies(n)
+    rsb = RegionSetBuilder(conf)
+    for k in xrange(0, n, m):
+        batch = batch_indicies[k:k + m]
+        x = X[batch]
+        y = Y[batch]
+        feed_dict = {trained_network.x: x, trained_network.y: y}
+        a, Ts = sess.run(feed_forward, feed_dict=feed_dict)
+        rsb.putRegion(Ts, np.argmax(y, axis=1), np.argmax(a, axis=1))
+        print "Sample: " + str(k) + " complete"
     return rsb.get_forest()
 
-
+def run_k_nearest():
+    pass
 
 def _create_batch_indicies(n):
     return np.arange(n)
