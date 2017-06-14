@@ -55,7 +55,7 @@ class KNearest:
                     nearest_instances[target] = InstanceTracker()
                 nearest_instances[target].increment(target == predicted)
 
-        return nearest_instances, np.mean(similarilties)
+        return nearest_instances, nearest_regions, similarilties
 
 class InstanceTracker:
 

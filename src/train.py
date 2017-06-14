@@ -72,6 +72,23 @@ def report(trained_network, X, Y, conf, sess):
         print "Sample: " + str(k) + " complete"
     return rsb.get_forest()
 
+def gen_adverserial_examples(network, X, Y, conf, sess):
+    """Generate an advererial counter-part for each image in X"""
+    n = X.shape[0]
+    m = conf.m
+    adverserial_op = network.fgsm_adverserial_example()
+    batch_indicies = _create_batch_indicies(n)
+    ad_xs = []
+    for k in xrange(0, n, m):
+        batch = batch_indicies[k:k + m]
+        x = X[batch]
+        y = Y[batch]
+        feed_dict = {network.x: x, network.y: y}
+        a, b, c, ad_x = sess.run(adverserial_op, feed_dict=feed_dict)
+        ad_xs.append(ad_x)
+    return np.concatenate(ad_xs)
+
+
 def run_k_nearest():
     pass
 
@@ -80,3 +97,4 @@ def _create_batch_indicies(n):
 
 def _random_batch(batch_indicies, m):
     return np.random.choice(batch_indicies, size=m, replace=False)
+

@@ -303,6 +303,9 @@ class Prediction:
         self.target = target
         self.predicted = predicted
 
+    def __str__(self):
+        return "Target: "+str(self.target)+", Prediction: "+str(self.predicted)
+
     def is_correct(self):
         return self.target == self.predicted
 

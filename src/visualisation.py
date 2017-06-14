@@ -10,7 +10,27 @@ def frequency_of_instance_per_region(num_pred_map):
     plt.xticks(ind, num_preds)
     plt.show()
 
-def show_neighbouring_instances(nearest_instances, predicted, target, avg_sim):
+def show_original_vs_adv(originals, adverseries):
+    """Take two numpy arrays where the first an array of original images from
+    a data set and the second is a corresponding array of adverserial examples
+    generated from the correspondent original."""
+    for i in xrange(originals.shape[0]):
+        org = originals[i]
+        adv = adverseries[i]
+        _plot_image(org, 1)
+        _plot_image(adv, 2)
+        plt.show()
+
+
+def _plot_image(im_vector, sub_num):
+    sub_plot = plt.subplot(1, 2, sub_num)
+    sub_plot.yaxis.set_visible(False)
+    sub_plot.xaxis.set_visible(False)
+    sub_plot.imshow(im_vector.reshape(28, 28), interpolation='nearest')
+
+
+
+def show_neighbouring_instances(nearest_instances, predicted, target, nearest_regions, similarilties):
     #Convert to numpy data structures
     num_bars = len(nearest_instances)
     ind = np.arange(num_bars)
@@ -22,14 +42,29 @@ def show_neighbouring_instances(nearest_instances, predicted, target, avg_sim):
         num_incorrect[i] = it.incorrect
         i += 1
 
+    #Print the details fo each nearby region
+    _print_neighbours(nearest_regions, similarilties)
+
     #Plot as bar charts
     plt.title('Predicted: '+str(predicted), loc='left')
-    plt.title('Sim: '+str(avg_sim))
+    plt.title('Sim: '+str(np.mean(similarilties)))
     plt.title('Target: '+str(target), loc='right')
     plt.bar(ind, num_correct, width=0.2, color='g')
     plt.bar(ind, num_incorrect, width=0.2, color='r')
     plt.xticks(ind, targets)
     plt.show()
+
+def _print_neighbours(nearest_regions, similarilties):
+    """Print the nearest neighbours in order of how far they are from the current prediction"""
+    print ""
+    for i in xrange(len(nearest_regions)):
+        reg = nearest_regions[i]
+        sim = similarilties[i]
+        print "Region: "+str(i+1)+"   ",
+        for pred in reg.predictions:
+            print str(pred)+", Sim: "+str(sim)+"   ",
+        print "\n"
+
 
 def _as_arrays(num_pred_map):
     pred_keys = num_pred_map.keys()

@@ -8,6 +8,7 @@ class FeedForward:
     def __init__(self, conf):
         self.sizes = conf.sizes
         self.learning_rate = conf.learning_rate
+        self.epsilon = conf.epsilon
         self.num_h_layers = len(self.sizes) - 2
         in_dim = self.sizes[0]
         out_dim = self.sizes[-1]
@@ -26,15 +27,26 @@ class FeedForward:
         l = len(self.sizes) - 2
         self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
 
+        #Create the cost function
+        # TODO train for zero too
+        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out), reduction_indices=[1]))
+
+
     def feed_forward(self):
         return self.a_out, self.T
 
     def train(self):
-        a, _ = self.feed_forward()
-        #TODO train for zero too
-        cross_entropy = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(a), reduction_indices=[1]))
-        train_op = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(cross_entropy)
+        train_op = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cross_entropy)
         return train_op
+
+    def fgsm_adverserial_example(self):
+        """Generate an adverserial example according to the fast
+        gradient sign method (Goodfellow 2015)"""
+        image_grads = tf.gradients(self.cross_entropy, self.x)[0]
+        grad_signs = tf.sign(image_grads)
+        pertubation = tf.multiply(self.epsilon, grad_signs)
+        return image_grads, grad_signs, pertubation, tf.add(self.x, pertubation)
+
 
     def accuracy(self):
         a, _ = self.feed_forward()
