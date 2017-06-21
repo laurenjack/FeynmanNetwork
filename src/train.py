@@ -12,7 +12,6 @@ def train_and_report(network, X, Y, conf):
 
     :return network, fully trained
     """
-
     n = X.shape[0]
     m = conf.m
     epochs = conf.epochs
@@ -21,29 +20,31 @@ def train_and_report(network, X, Y, conf):
     sess = tf.InteractiveSession()
     #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     tf.global_variables_initializer().run()
-    train_op = network.train()
+    #train_op = network.train()
     feed_forward = network.feed_forward()
-    acc_op = network.accuracy()
+    #acc_op = network.accuracy()
 
     #Train network
-    for epoch in xrange(epochs):
-        np.random.shuffle(batch_indicies)
-        for k in xrange(0, n, m):
-            batch = batch_indicies[k:k+m]
-            x = X[batch]
-            y = Y[batch]
-            feed_dict = {network.x : x, network.y: y}
-            #a = sess.run(feed_forward, feed_dict=feed_dict)
-            sess.run(train_op, feed_dict=feed_dict)
-        eval_batch = _random_batch(batch_indicies, 1000)
-        x = X[eval_batch]
-        y = Y[eval_batch]
-        feed_dict = {network.x : x, network.y: y}
-        acc = sess.run(acc_op, feed_dict=feed_dict)
-        print "Epoch "+str(epoch+1)+" Train Acc Sample: "+str(acc)
+    train(network, X, Y, m, epochs, sess)
+    # for epoch in xrange(epochs):
+    #     np.random.shuffle(batch_indicies)
+    #     for k in xrange(0, n, m):
+    #         batch = batch_indicies[k:k+m]
+    #         x = X[batch]
+    #         y = Y[batch]
+    #         feed_dict = {network.x : x, network.y: y}
+    #         #a = sess.run(feed_forward, feed_dict=feed_dict)
+    #         sess.run(train_op, feed_dict=feed_dict)
+    #     eval_batch = _random_batch(batch_indicies, 1000)
+    #     x = X[eval_batch]
+    #     y = Y[eval_batch]
+    #     feed_dict = {network.x : x, network.y: y}
+    #     acc = sess.run(acc_op, feed_dict=feed_dict)
+    #     print "Epoch "+str(epoch+1)+" Train Acc Sample: "+str(acc)
 
     #Report on the number of linear regions
     rsb = RegionSetBuilder(conf)
+    print "Building regions ..."
     for k in xrange(0, n, m):
         batch = batch_indicies[k:k + m]
         x = X[batch]
@@ -51,8 +52,38 @@ def train_and_report(network, X, Y, conf):
         feed_dict = {network.x: x, network.y: y}
         a, Ts = sess.run(feed_forward, feed_dict=feed_dict)
         rsb.putRegion(Ts, np.argmax(y, axis=1), np.argmax(a, axis=1))
-        print "Sample: "+str(k)+" complete"
+    print "Region Building Complete."
     return rsb.get_forest(), sess
+
+
+
+def train(network, X, Y, m, epochs, sess, sub_set_report=1000, is_feyn=False):
+    n = X.shape[0]
+    batch_indicies = _create_batch_indicies(n)
+
+    train_op = network.train()
+    acc_op = network.accuracy()
+    wb = network.wb()
+
+    # Train network
+    for epoch in xrange(epochs):
+        np.random.shuffle(batch_indicies)
+        for k in xrange(0, n, m):
+            batch = batch_indicies[k:k + m]
+            x = X[batch]
+            y = Y[batch]
+            feed_dict = {network.x: x, network.y: y}
+            # a = sess.run(feed_forward, feed_dict=feed_dict)
+            sess.run(train_op, feed_dict=feed_dict)
+            if is_feyn:
+                w, b = sess.run(wb, feed_dict=feed_dict)
+                print "W: "+str(w)+"b: "+str(b)
+        eval_batch = _random_batch(batch_indicies, sub_set_report)
+        x = X[eval_batch]
+        y = Y[eval_batch]
+        feed_dict = {network.x: x, network.y: y}
+        acc = sess.run(acc_op, feed_dict=feed_dict)
+        print "Epoch " + str(epoch + 1) + " Train Acc Sample: " + str(acc)
 
 
 def report(trained_network, X, Y, conf, sess):
@@ -62,6 +93,7 @@ def report(trained_network, X, Y, conf, sess):
     feed_forward = trained_network.feed_forward()
     batch_indicies = _create_batch_indicies(n)
     rsb = RegionSetBuilder(conf)
+    print "Building regions ..."
     for k in xrange(0, n, m):
         batch = batch_indicies[k:k + m]
         x = X[batch]
@@ -69,7 +101,7 @@ def report(trained_network, X, Y, conf, sess):
         feed_dict = {trained_network.x: x, trained_network.y: y}
         a, Ts = sess.run(feed_forward, feed_dict=feed_dict)
         rsb.putRegion(Ts, np.argmax(y, axis=1), np.argmax(a, axis=1))
-        print "Sample: " + str(k) + " complete"
+    print "Region Building Complete."
     return rsb.get_forest()
 
 def gen_adverserial_examples(network, X, Y, conf, sess):

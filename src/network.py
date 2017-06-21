@@ -53,6 +53,9 @@ class FeedForward:
         is_correct = tf.equal(tf.argmax(self.y, 1), tf.argmax(a, 1))
         return tf.reduce_mean(tf.cast(is_correct, tf.float32))
 
+    def wb(self):
+        return None, None
+
     def get_inaccurate_indicies(self):
         a, T = self.feed_forward()
         predictions = tf.argmax(a, axis=1)

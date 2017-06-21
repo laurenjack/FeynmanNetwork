@@ -138,9 +138,9 @@ class RegionForest:
             return
         for key, T in regions.iteritems():
             if isinstance(T, FinalRegion):
-                if len(corr) < n and T.has_correct_pred():
+                if len(corr) < n and T.is_first_correct():
                     corr.append(T)
-                if len(incorr) < n and T.has_inc_pred():
+                if len(incorr) < n and not T.is_first_correct():
                     incorr.append(T)
             else:
                 self._get_n_correct_and_incorrect(T.sub_regions, n, corr, incorr)
@@ -278,11 +278,12 @@ class FinalRegion(Region):
     def get_predictions(self):
         return self.predictions
 
-    def has_correct_pred(self):
-        return any(map(lambda p: p.is_correct(), self.predictions))
+    def is_first_correct(self):
+        return self.predictions[0].is_correct()
+        #return any(map(lambda p: p.is_correct(), self.predictions))
 
-    def has_inc_pred(self):
-        return any(map(lambda p: not p.is_correct(), self.predictions))
+    #def has_inc_pred(self):
+        #return any(map(lambda p: not p.is_correct(), self.predictions))
 
     def is_pure(self):
         target = self.predictions[0].target
