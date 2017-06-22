@@ -1,15 +1,14 @@
+import tensorflow as tf
 import numpy as np
 from k_nearest import KNearest
 from train import *
 from feynmanmodules.simple_logistic import SimpleLogistic
 
-def run(training_region_forest, conf, feyn_n=1000):
+def run(training_region_forest, val_region_forest, conf, feyn_n=1000):
     """Trains a Feynman module to predict the probability its corresponding
     network is correct, and reports the results."""
     # X = conf.X
     # Y = conf.Y
-    X_val = conf.X_val
-    Y_val = conf.Y_val
     m = conf.m
     epochs = conf.feyn_epochs
 
@@ -18,8 +17,7 @@ def run(training_region_forest, conf, feyn_n=1000):
     simpleLogistic = SimpleLogistic(conf)
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
-    #val_region_forest = report(network, X_val, Y_val, conf, sess)
-    corr, incorr = training_region_forest.get_n_correct_and_incorrect(feyn_n)
+    corr, incorr = val_region_forest.get_n_correct_and_incorrect(feyn_n)
     train_region_set = training_region_forest.all_final_regions()
     X_feyn, Y_feyn = _create_merged_ds(corr, incorr, train_region_set, kNearest, sess)
     #Standardize the distances so the network can train TODO consider log distance
@@ -48,9 +46,11 @@ def _create_data_feynman(prediction_set, all_regions_set, kNearest, sess):
         simpleStats = kNearest.report_simple_stats(sess, T, first_pred.predicted, all_regions_set)
         x = simpleStats.as_vector()
         #Create the target
-        y = np.zeros(1)
+        y = np.zeros((1, 2))
         if first_pred.is_correct():
-            y[0] = 1
+            y[0,0] = 1
+        else:
+            y[0,1] = 1
         xs.append(x)
         ys.append(y)
     return np.concatenate(xs), np.concatenate(ys)
