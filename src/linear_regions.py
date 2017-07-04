@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class RegionSetBuilder:
 
     def __init__(self, conf):
@@ -93,14 +94,18 @@ class RegionSetBuilder:
         by a unique integer"""
         hash_powers = []
         for l in sizes[1:-1]:
-            hp = np.zeros(shape=l, dtype=np.long)
+            #hp = np.zeros(shape=l, dtype=np.long)
+            hp = []
             for i in xrange(l):
-                hp[i] = 1 << (l - i - 1)
+                hp.append(1 << (l - i - 1))
+                #hp[i] = 1 << (l - i - 1)
             hash_powers.append(hp)
         return hash_powers
 
     def _hash_t(self, t, l):
-        return np.sum(self.hash_powers[l] * t)
+        hp = self.hash_powers[l]
+        return sum([hp[i] * t[i] for i in xrange(len(hp))])
+        #return np.sum(self.hash_powers[l] * t)
 
 class RegionForest:
     """Data structure representing all the active regions in a network for
@@ -187,6 +192,8 @@ class FinalRegionSet:
             self.Ts = np.array(Ts)
         else:
             self.Ts = Ts
+
+
 
 class Region:
     """Data structure representing a linear region at a given layer"""

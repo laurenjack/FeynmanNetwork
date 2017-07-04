@@ -42,10 +42,10 @@ def run(network, train_regions, conf, sess, test_samples=10):
         for i in xrange(len(final_regions)):
             first_pred = final_regions[i].predictions[0]
             T = Ts[i]
-            nearest, nearest_regions, similarilties = k_nearest.report_KNearest(sess, T, first_pred.predicted,
+            nearest, nearest_regions, distances, avg_dist_pc = k_nearest.report_KNearest(sess, T, first_pred.predicted,
                                                                                 train_regions)
             show_neighbouring_instances(nearest, first_pred.predicted, first_pred.target, nearest_regions,
-                                        similarilties)
+                                        distances, avg_dist_pc)
 
     K_nearest_for_all(adv_regions)
     K_nearest_for_all(corr)

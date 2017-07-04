@@ -23,7 +23,7 @@ class KNearestSpec(TestCase):
         #Compute K-Nearest
         sess = tf.InteractiveSession()
         tf.global_variables_initializer().run()
-        act_nearest, _, _ = kNearest.report_KNearest(sess, pred_reg, pred_class, final_reg_set)
+        act_nearest, _, _, _ = kNearest.report_KNearest(sess, pred_reg, pred_class, final_reg_set)
 
         #Compare
         self.assertEqual(exp_nearest, act_nearest)

@@ -30,7 +30,7 @@ def _plot_image(im_vector, sub_num):
 
 
 
-def show_neighbouring_instances(nearest_instances, predicted, target, nearest_regions, similarilties):
+def show_neighbouring_instances(nearest_instances, predicted, target, nearest_regions, distances, avg_dist_pc):
     #Convert to numpy data structures
     num_bars = len(nearest_instances)
     ind = np.arange(num_bars)
@@ -43,11 +43,11 @@ def show_neighbouring_instances(nearest_instances, predicted, target, nearest_re
         i += 1
 
     #Print the details fo each nearby region
-    _print_neighbours(nearest_regions, similarilties)
+    _print_neighbours(nearest_regions, distances)
 
     #Plot as bar charts
     plt.title('Predicted: '+str(predicted), loc='left')
-    plt.title('Sim: '+str(np.mean(similarilties)))
+    plt.title('Dist: '+str(avg_dist_pc))
     plt.title('Target: '+str(target), loc='right')
     plt.bar(ind, num_correct, width=0.2, color='g')
     plt.bar(ind, num_incorrect, width=0.2, color='r')

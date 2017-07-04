@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from linear_regions import *
+from activation_tuples import *
 #from tensorflow.python import debug as tf_debug
 
 def train_and_report(network, X, Y, conf):
@@ -26,24 +27,9 @@ def train_and_report(network, X, Y, conf):
 
     #Train network
     train(network, X, Y, m, epochs, sess)
-    # for epoch in xrange(epochs):
-    #     np.random.shuffle(batch_indicies)
-    #     for k in xrange(0, n, m):
-    #         batch = batch_indicies[k:k+m]
-    #         x = X[batch]
-    #         y = Y[batch]
-    #         feed_dict = {network.x : x, network.y: y}
-    #         #a = sess.run(feed_forward, feed_dict=feed_dict)
-    #         sess.run(train_op, feed_dict=feed_dict)
-    #     eval_batch = _random_batch(batch_indicies, 1000)
-    #     x = X[eval_batch]
-    #     y = Y[eval_batch]
-    #     feed_dict = {network.x : x, network.y: y}
-    #     acc = sess.run(acc_op, feed_dict=feed_dict)
-    #     print "Epoch "+str(epoch+1)+" Train Acc Sample: "+str(acc)
 
     #Report on the number of linear regions
-    rsb = RegionSetBuilder(conf)
+    rsb = create_rsb(conf)
     print "Building regions ..."
     for k in xrange(0, n, m):
         batch = batch_indicies[k:k + m]
@@ -92,7 +78,7 @@ def report(trained_network, X, Y, conf, sess):
     m = conf.m
     feed_forward = trained_network.feed_forward()
     batch_indicies = _create_batch_indicies(n)
-    rsb = RegionSetBuilder(conf)
+    rsb = create_rsb(conf)
     print "Building regions ..."
     for k in xrange(0, n, m):
         batch = batch_indicies[k:k + m]
@@ -129,4 +115,11 @@ def _create_batch_indicies(n):
 
 def _random_batch(batch_indicies, m):
     return np.random.choice(batch_indicies, size=m, replace=False)
+
+from activation_tuples import TupleSetBuilder
+
+def create_rsb(conf):
+    if conf.is_binary:
+        return RegionSetBuilder(conf)
+    return TupleSetBuilder(conf)
 
