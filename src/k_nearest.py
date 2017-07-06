@@ -117,6 +117,7 @@ class KNearest:
         knn_all = self.KNN.distances_and_indices(False)
         distances, nearest_indicies = sess.run(knn_all, feed_dict=feed_dict)
         nearest_regions = [final_regions[i] for i in nearest_indicies]
+        avg_dist = np.mean(distances)
 
         #Get K-NearestRegions that are predicted and correct
         knn_pc = self.KNN.distances_and_indices(True)
@@ -135,7 +136,7 @@ class KNearest:
                     nearest_instances[target] = InstanceTracker()
                 nearest_instances[target].increment(target == predicted)
 
-        return nearest_instances, nearest_regions, distances, avg_dist_pc
+        return nearest_instances, nearest_regions, distances, avg_dist #avg_dist_pc
 
 class InstanceTracker:
 

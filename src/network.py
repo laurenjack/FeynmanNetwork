@@ -33,17 +33,22 @@ class FeedForward:
         l = len(self.sizes) - 2
         self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
 
-        self.predictions = tf.argmax(self.a_out, axis=1)
+        with tf.device("/cpu:0"):
+            self.predictions = tf.argmax(self.a_out, axis=1)
+            self.predictions = tf.cast(self.predictions, tf.int32)
+            pred_indices = tf.reshape(self.predictions, shape=[-1, 1])
+            m = tf.shape(self.predictions)[0]
+            b_indices = tf.range(0, m)
+            b_indices = tf.reshape(b_indices, shape=[-1, 1])
+            indices = tf.concat([b_indices, pred_indices], axis=1)
+            zeros = tf.zeros(tf.shape(self.predictions))
+            max_removed = tf.Variable(initial_value=tf.zeros(shape=[5,5]), trainable=False, validate_shape=False)
+            max_removed = tf.assign(max_removed, self.a_out, validate_shape=False)
+            max_removed = tf.scatter_nd_update(max_removed, indices, zeros)
+            self.second_predictions = tf.argmax(max_removed, axis=1)
 
         if not self.is_binary:
-            #Update magnitude of a_i using path sums of the latter parts of the netwok
-            num_to_update = len(self.T[:-1])
-            for i in xrange(num_to_update):
-                t = self.T[i]
-                l = i + 1
-                w_name = "W"+str(l)
-                w = tf.get_variable(w_name)
-                for j in xrange()
+            self._scale_regions()
 
 
         #Create the cost function
@@ -92,32 +97,28 @@ class FeedForward:
         #Create parameters
         W = tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
         b = tf.Variable(0.1 * np.ones(s_out), dtype=tf.float32, name=b_name)
-        self.weights.append(W)
-        self.biases.append(b)
+        self.Ws.append(W)
+        self.bs.append(b)
 
         #Apply the weighted sum and activation
         z = tf.add(tf.matmul(a_in, W), b)
         a_out = act_func(z)
         return a_out
 
-    def _create_path_sums(self):
-        num_W_mats = len(self.T[:-1])
+    def _scale_regions(self):
         sm_W = self.Ws[-1]
-        sm_b = self.bs[-1]
         #For each prediction in the batch, select the weight vector leading into that prediction
-        predicted_weights = tf.gather(tf.transpose(sm_W), self.predictions)
-        predicted_weights = tf.transpose(predicted_weights)
-        predicted_biases = tf.gather(sm_b, self.predictions)
+        predicted_weights = tf.gather(tf.transpose(sm_W), self.second_predictions)
+        scales = tf.transpose(predicted_weights)
 
-        
+        for l in xrange(self.num_h_layers - 1, 0, -1):
+            a = self.T[l]
+            self.T[l] = tf.multiply(a, tf.transpose(scales))
+            #Remove all paths which do not influence the output as they feed from a zero
+            scales = tf.where(tf.greater(a, 0), tf.zeros(shape=tf.shape(scales)), scales)
+            scales = tf.matmul(self.Ws[l], scales)
 
-        W_mats = []
-        for i in xrange(num_W_mats):
-            t = self.T[i]
-            l = i + 1
-            w_name = "W" + str(l)
-            w = tf.get_variable(w_name)
-            for j in xrange()
+
 
 
 
