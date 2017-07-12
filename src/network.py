@@ -33,19 +33,19 @@ class FeedForward:
         l = len(self.sizes) - 2
         self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
 
-        with tf.device("/cpu:0"):
-            self.predictions = tf.argmax(self.a_out, axis=1)
-            self.predictions = tf.cast(self.predictions, tf.int32)
-            pred_indices = tf.reshape(self.predictions, shape=[-1, 1])
-            m = tf.shape(self.predictions)[0]
-            b_indices = tf.range(0, m)
-            b_indices = tf.reshape(b_indices, shape=[-1, 1])
-            indices = tf.concat([b_indices, pred_indices], axis=1)
-            zeros = tf.zeros(tf.shape(self.predictions))
-            max_removed = tf.Variable(initial_value=tf.zeros(shape=[5,5]), trainable=False, validate_shape=False)
-            max_removed = tf.assign(max_removed, self.a_out, validate_shape=False)
-            max_removed = tf.scatter_nd_update(max_removed, indices, zeros)
-            self.second_predictions = tf.argmax(max_removed, axis=1)
+        # with tf.device("/cpu:0"):
+        self.predictions = tf.argmax(self.a_out, axis=1)
+            # self.predictions = tf.cast(self.predictions, tf.int32)
+            # pred_indices = tf.reshape(self.predictions, shape=[-1, 1])
+            # m = tf.shape(self.predictions)[0]
+            # b_indices = tf.range(0, m)
+            # b_indices = tf.reshape(b_indices, shape=[-1, 1])
+            # indices = tf.concat([b_indices, pred_indices], axis=1)
+            # zeros = tf.zeros(tf.shape(self.predictions))
+            # max_removed = tf.Variable(initial_value=tf.zeros(shape=[5,5]), trainable=False, validate_shape=False)
+            # max_removed = tf.assign(max_removed, self.a_out, validate_shape=False)
+            # max_removed = tf.scatter_nd_update(max_removed, indices, zeros)
+            # self.second_predictions = tf.argmax(max_removed, axis=1)
 
         if not self.is_binary:
             self._scale_regions()

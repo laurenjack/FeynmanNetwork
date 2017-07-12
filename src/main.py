@@ -12,7 +12,7 @@ sizes = [784, 30, 30, 10]
 learning_rate = 0.01
 m = 20
 epochs = 20
-conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=10, epsilon=0.25, is_binary=False)#/255.0)
+conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=10, epsilon=0.25, is_binary=True)#/255.0)
 network = FeedForward(conf)
 X = conf.X
 Y = conf.Y

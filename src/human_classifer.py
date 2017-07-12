@@ -47,6 +47,6 @@ def run(network, train_regions, conf, sess, test_samples=10):
             show_neighbouring_instances(nearest, first_pred.predicted, first_pred.target, nearest_regions,
                                         distances, avg_dist_pc)
 
-    K_nearest_for_all(adv_regions)
     K_nearest_for_all(corr)
     K_nearest_for_all(incorr)
+    K_nearest_for_all(adv_regions)

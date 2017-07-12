@@ -6,11 +6,12 @@ class TupleDistanceKNN:
     """Computation graph that computes nearest neighbour based on tuple distance"""
 
     def __init__(self, k, all_hidden):
+        self.is_binary = True
         self.k = k
         self.all_regions = tf.placeholder(tf.bool, shape=[None, all_hidden], name="all_regions")
         self.predicted_region = tf.placeholder(tf.bool, shape=[all_hidden], name="predicted_region")
 
-    def distances_and_indices(self):
+    def distances_and_indices(self, just_pred_and_correct=False):
         "Get the indices of the K nearest active regions to the current prediction."
         all_matches = tf.logical_xor(self.predicted_region, self.all_regions)
         #Cast to integers
@@ -25,6 +26,7 @@ class SimpleNetworkDistanceKNN:
     between activations"""
 
     def __init__(self, k, all_hidden):
+        self.is_binary = False
         self.k = k
         self.all_regions = tf.placeholder(tf.float32, shape=[None, all_hidden], name="all_regions")
         self.all_targets = tf.placeholder(tf.int32, shape=[None], name="all_targets")
@@ -106,12 +108,21 @@ class KNearest:
         """
         final_regions = final_reg_set.final_regions
         Ts = final_reg_set.Ts
-        all_targets = final_reg_set.all_targets
-        all_predicted = final_reg_set.all_predicted
-        n = len(final_regions)
-        feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts,
-                     self.KNN.all_targets: all_targets, self.KNN.all_predicted: all_predicted,
-                     self.KNN.predicted_class: pred_class, self.KNN.n: n}
+        if not self.KNN.is_binary:
+            all_targets = final_reg_set.all_targets
+            all_predicted = final_reg_set.all_predicted
+            n = len(final_regions)
+            feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts,
+                         self.KNN.all_targets: all_targets, self.KNN.all_predicted: all_predicted,
+                         self.KNN.predicted_class: pred_class, self.KNN.n: n}
+
+            # Get K-NearestRegions that are predicted and correct
+            knn_pc = self.KNN.distances_and_indices(True)
+            distances_pc, nearest_indicies_pc = sess.run(knn_pc, feed_dict=feed_dict)
+            avg_dist_pc = np.mean(distances_pc)
+            # nearest_regions_pc = [final_regions[i] for i in nearest_indicies_pc]
+        else:
+            feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts}
 
         #Get K-Nearest regions
         knn_all = self.KNN.distances_and_indices(False)
@@ -119,11 +130,7 @@ class KNearest:
         nearest_regions = [final_regions[i] for i in nearest_indicies]
         avg_dist = np.mean(distances)
 
-        #Get K-NearestRegions that are predicted and correct
-        knn_pc = self.KNN.distances_and_indices(True)
-        distances_pc, nearest_indicies_pc = sess.run(knn_pc, feed_dict=feed_dict)
-        avg_dist_pc = np.mean(distances_pc)
-        #nearest_regions_pc = [final_regions[i] for i in nearest_indicies_pc]
+
 
         #Compose map of instances
         nearest_instances = {}
