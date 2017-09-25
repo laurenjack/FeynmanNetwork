@@ -19,7 +19,7 @@ def run(network, train_regions, conf, sess, test_samples=10):
     # Create a region forest for the adverserial examples
     adv_region_forest = report(network, adv_X, adv_Y, conf, sess)
     adv_regions = adv_region_forest.all_final_regions()
-    #show_original_vs_adv(X_sub, adv_X)
+    # show_original_vs_adv(X_sub, adv_X)
 
 
     # Find the regions for the validation set
@@ -47,6 +47,7 @@ def run(network, train_regions, conf, sess, test_samples=10):
             show_neighbouring_instances(nearest, first_pred.predicted, first_pred.target, nearest_regions,
                                         distances, avg_dist_pc)
 
-    K_nearest_for_all(corr)
-    K_nearest_for_all(incorr)
+    # K_nearest_for_all(corr)
+    # K_nearest_for_all(incorr)
+    print "ADVERSERIES"
     K_nearest_for_all(adv_regions)

@@ -68,7 +68,7 @@ def train(network, X, Y, m, epochs, sess, sub_set_report=1000, is_feyn=False):
         x = X[eval_batch]
         y = Y[eval_batch]
         feed_dict = {network.x: x, network.y: y}
-        acc = sess.run(acc_op, feed_dict=feed_dict)
+        acc, z, a = sess.run(acc_op, feed_dict=feed_dict)
         print "Epoch " + str(epoch + 1) + " Train Acc Sample: " + str(acc)
 
 

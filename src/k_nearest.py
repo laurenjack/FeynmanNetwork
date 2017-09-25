@@ -28,6 +28,7 @@ class SimpleNetworkDistanceKNN:
     def __init__(self, k, all_hidden):
         self.is_binary = False
         self.k = k
+        self.all_distances = None
         self.all_regions = tf.placeholder(tf.float32, shape=[None, all_hidden], name="all_regions")
         self.all_targets = tf.placeholder(tf.int32, shape=[None], name="all_targets")
         self.all_predicted = tf.placeholder(tf.int32, shape=[None], name="all_predicted")
@@ -37,19 +38,22 @@ class SimpleNetworkDistanceKNN:
 
     def distances_and_indices(self, just_pred_and_correct=False):
         "Get the indices of the K nearest active regions to the current prediction."
-        all_distances = tf.sqrt(tf.reduce_sum(tf.pow(self.all_regions - self.predicted_region, 2), axis=1))
+        self.all_distances = tf.sqrt(tf.reduce_sum(tf.pow(self.all_regions - self.predicted_region, 2), axis=1))
         if just_pred_and_correct:
-            all_distances += self._dist_hack()
-        distances, indices = tf.nn.top_k(tf.negative(all_distances), k=self.k)
-        return tf.negative(distances), indices
+            self.all_distances += self._dist_hack()
+        distances, indices = tf.nn.top_k(tf.negative(self.all_distances), k=self.k)
+        return tf.negative(distances), indices, self.all_distances
 
     def _dist_hack(self):
         is_pred = tf.equal(self.all_predicted, self.predicted_class)
         is_correct = tf.equal(self.all_targets, self.all_predicted)
+        #all_is_x = tf.equal(self.all_predicted, 4 * tf.ones(tf.shape(self.all_predicted), dtype=tf.int32))
         is_pred_and_correct = tf.logical_and(is_pred, is_correct)
         zeros = tf.zeros(shape=[self.n])
-        infs = tf.multiply(float('inf'), tf.ones(shape=[self.n]))
+        infs = tf.multiply(1000000.0, tf.ones(shape=[self.n]))
+        #return tf.where(is_pred, infs, zeros)
         return tf.where(is_pred_and_correct, zeros, infs)
+        #return tf.where(all_is_x, zeros, infs)
 
 class KNearest:
 
@@ -118,17 +122,19 @@ class KNearest:
 
             # Get K-NearestRegions that are predicted and correct
             knn_pc = self.KNN.distances_and_indices(True)
-            distances_pc, nearest_indicies_pc = sess.run(knn_pc, feed_dict=feed_dict)
-            avg_dist_pc = np.mean(distances_pc)
-            # nearest_regions_pc = [final_regions[i] for i in nearest_indicies_pc]
+            distances, nearest_indicies, all_dist = sess.run(knn_pc, feed_dict=feed_dict)
+            all_dist = np.max(all_dist)
+            print all_dist
+            avg_dist = np.mean(distances)
+            nearest_regions = [final_regions[i] for i in nearest_indicies]
         else:
             feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts}
 
         #Get K-Nearest regions
-        knn_all = self.KNN.distances_and_indices(False)
-        distances, nearest_indicies = sess.run(knn_all, feed_dict=feed_dict)
-        nearest_regions = [final_regions[i] for i in nearest_indicies]
-        avg_dist = np.mean(distances)
+            knn_all = self.KNN.distances_and_indices(False)
+            distances, nearest_indicies = sess.run(knn_all, feed_dict=feed_dict)
+            nearest_regions = [final_regions[i] for i in nearest_indicies]
+            avg_dist = np.mean(distances)
 
 
 
@@ -194,6 +200,8 @@ def _create_KNearest(k, all_hidden, is_binary):
     if is_binary:
         return TupleDistanceKNN(k, all_hidden)
     return SimpleNetworkDistanceKNN(k, all_hidden)
+
+
 
 
 # replicated_regions = tf.reshape(self.all_regions, [-1, 1, self.all_hidden])
