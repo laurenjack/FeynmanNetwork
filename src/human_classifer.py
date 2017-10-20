@@ -9,6 +9,8 @@ def run(network, train_regions, conf, sess, test_samples=10):
     Y = conf.Y
     X_val = conf.X_val
     Y_val = conf.Y_val
+    np.random.shuffle(conf.X_val)
+    np.random.shuffle(conf.Y_val)
 
     # test the adverserial examples
     n = X.shape[0]
@@ -19,7 +21,7 @@ def run(network, train_regions, conf, sess, test_samples=10):
     # Create a region forest for the adverserial examples
     adv_region_forest = report(network, adv_X, adv_Y, conf, sess)
     adv_regions = adv_region_forest.all_final_regions()
-    # show_original_vs_adv(X_sub, adv_X)
+    #show_original_vs_adv(X_sub, adv_X)
 
 
     # Find the regions for the validation set
@@ -47,7 +49,7 @@ def run(network, train_regions, conf, sess, test_samples=10):
             show_neighbouring_instances(nearest, first_pred.predicted, first_pred.target, nearest_regions,
                                         distances, avg_dist_pc)
 
-    # K_nearest_for_all(corr)
+    K_nearest_for_all(corr)
     # K_nearest_for_all(incorr)
     print "ADVERSERIES"
     K_nearest_for_all(adv_regions)

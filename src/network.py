@@ -11,6 +11,7 @@ class FeedForward:
         self.epsilon = conf.epsilon
         self.num_h_layers = len(self.sizes) - 2
         self.is_binary = conf.is_binary
+        self.is_w_pixels = conf.is_w_pixels
         in_dim = self.sizes[0]
         out_dim = self.sizes[-1]
         # Create place holder for inputs and target outputs
@@ -115,14 +116,29 @@ class FeedForward:
         predicted_weights = tf.gather(tf.transpose(sm_W), self.predictions)
         #scales = predicted_weights
         scales = tf.ones(tf.shape(predicted_weights))
+        #scales = tf.ones(tf.shape(self.y))
+        #scales = tf.transpose(tf.matmul(sm_W, tf.transpose(scales)))
+        bias_sum = tf.expand_dims(tf.zeros(tf.shape(tf.reduce_sum(self.y, axis=1))), axis=1)
 
         for l in xrange(self.num_h_layers - 1, -1, -1):
             self.scale_list.append(scales)
             a = self.T[l]
-            self.T[l] = tf.multiply(a, scales)
+            l_size = self.sizes[l]
+            self.T[l] = tf.multiply(a, scales) + bias_sum
+            bias_sum += tf.matmul(scales, tf.expand_dims(self.bs[l], axis=1))
             # Remove all paths which do not influence the output as they feed from a zero
             scales = tf.where(tf.greater(a, 0), tf.zeros(shape=tf.shape(scales)), scales)
             scales = tf.transpose(tf.matmul(self.Ws[l], tf.transpose(scales)))
+
+        #Weight the pixels now
+        if self.is_w_pixels:
+            self.scale_list.append(scales)
+            self.T = tf.multiply(tf.ones(tf.shape(self.x)), scales) + bias_sum
+        else:
+            self.scale_list.append(scales)
+            self.T.append(tf.multiply(self.x, scales) + bias_sum)
+
+        self.T = [self.T[-2]]
 
 
 

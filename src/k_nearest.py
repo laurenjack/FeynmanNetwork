@@ -38,11 +38,13 @@ class SimpleNetworkDistanceKNN:
 
     def distances_and_indices(self, just_pred_and_correct=False):
         "Get the indices of the K nearest active regions to the current prediction."
-        self.all_distances = tf.sqrt(tf.reduce_sum(tf.pow(self.all_regions - self.predicted_region, 2), axis=1))
+        class_variances, num_class = self.variances()
+        variance = class_variances[self.predicted_class]
+        self.all_distances = tf.sqrt(tf.reduce_sum(tf.div(tf.pow(self.all_regions - self.predicted_region, 2), 1.0), axis=1))
         if just_pred_and_correct:
             self.all_distances += self._dist_hack()
         distances, indices = tf.nn.top_k(tf.negative(self.all_distances), k=self.k)
-        return tf.negative(distances), indices, self.all_distances
+        return tf.negative(distances), indices #num_class
 
     def _dist_hack(self):
         is_pred = tf.equal(self.all_predicted, self.predicted_class)
@@ -55,11 +57,28 @@ class SimpleNetworkDistanceKNN:
         return tf.where(is_pred_and_correct, zeros, infs)
         #return tf.where(all_is_x, zeros, infs)
 
+    def variances(self):
+        variances = []
+        for i in xrange(10):
+            current_class = i * tf.ones(tf.shape(self.all_targets), dtype=tf.int32)
+            zeros = tf.zeros(tf.shape(self.all_regions), dtype=tf.float32)
+            is_current_class = tf.equal(self.all_targets, current_class)
+            current_regions = tf.where(is_current_class, self.all_regions, zeros)
+            ss = tf.cast(tf.count_nonzero(is_current_class), tf.float32)
+            act_means = tf.reduce_mean(current_regions, axis=0)
+            current_variances = tf.div(tf.reduce_sum(tf.pow(current_regions - act_means, 2), axis=0), ss)
+            variances.append(current_variances)
+        class_variances = tf.stack(variances)
+        return class_variances, ss
+
 class KNearest:
 
     def __init__(self, conf):
-        all_hidden = sum(conf.sizes[1:-1])
-        self.KNN = _create_KNearest(conf.k, all_hidden, conf.is_binary)
+        if conf.is_w_pixels:
+            dimensions = 784
+        else:
+            dimensions = 784 # sum(conf.sizes[1:-1]) + 784
+        self.KNN = _create_KNearest(conf.k, dimensions, conf.is_binary)
 
     def report_simple_stats(self, sess, prediction, pred_class, final_reg_set):
         """Report the 4 simple statistics as specified in simple_logistic.py for a batch of predictions"""
@@ -121,10 +140,8 @@ class KNearest:
                          self.KNN.predicted_class: pred_class, self.KNN.n: n}
 
             # Get K-NearestRegions that are predicted and correct
-            knn_pc = self.KNN.distances_and_indices(True)
-            distances, nearest_indicies, all_dist = sess.run(knn_pc, feed_dict=feed_dict)
-            all_dist = np.max(all_dist)
-            print all_dist
+            knn_pc = self.KNN.distances_and_indices(False)
+            distances, nearest_indicies = sess.run(knn_pc, feed_dict=feed_dict)
             avg_dist = np.mean(distances)
             nearest_regions = [final_regions[i] for i in nearest_indicies]
         else:

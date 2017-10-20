@@ -13,14 +13,21 @@ class TupleSetBuilder:
 
     def __init__(self, conf):
         self.activation_tuples = []
+        self.is_w_pixels = conf.is_w_pixels
 
     def putRegion(self, A_by_layer, targets, predictions):
-        all_A = self._transpose(A_by_layer)
+        if self.is_w_pixels:
+            all_A = A_by_layer
+        else:
+            all_A = self._transpose(A_by_layer)
         for i in xrange(len(all_A)):
             target = targets[i]
             predicted = predictions[i]
             prediction = Prediction(target, predicted)
-            acts = np.concatenate(all_A[i])
+            if self.is_w_pixels:
+                acts = all_A[i]
+            else:
+                acts = np.concatenate(all_A[i])
             act_tup = ActivationTuple(prediction, acts)
             self.activation_tuples.append(act_tup)
 
