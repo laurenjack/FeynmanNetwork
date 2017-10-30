@@ -38,7 +38,7 @@ def train(resnet, conf):
                                   trainable=False)
 
     logits = resnet.inference()
-    loss_ = resnet.loss()
+    loss_ = resnet.loss
     predictions = tf.nn.softmax(logits)
 
     top1_error = top_k_error(predictions, resnet.labels, m, 1)

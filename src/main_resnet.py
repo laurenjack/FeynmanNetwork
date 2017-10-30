@@ -8,10 +8,13 @@ conf = ConfBuilder()
 
 is_network_train = False
 
+#tf.set_random_seed(653712155)
+#np.random.seed(65331165)
+
 #Data_params
 conf.num_classes = 10
 conf.image_dims = 32
-conf.train_dir = '/tmp/resnet_train'
+conf.train_dir = '/home/laurenjack/models'
 conf.n = 50000
 
 #Training parameters
@@ -32,11 +35,11 @@ conf.has_mp = False
 conf.k_size = 3
 conf.f_stride = 2
 conf.stride = 1
-conf.adv_epsilon = 0.1
+conf.adv_epsilon = 0.01
 
 #Accuary prediction params
 conf.k = 10
-conf.s = 10
+conf.s = 5
 
 conf = conf.build()
 

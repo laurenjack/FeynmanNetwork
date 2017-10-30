@@ -52,14 +52,15 @@ class Resnet:
             stack_scope = 'stack' + str(i)
             a = self._stack(a, stack, stack_scope)
 
-        # self.pre_final = a
-        a = tf.reduce_mean(a, reduction_indices=[1, 2], name="avg_pool")
+        # self.pre_final = tf.reduce_sum(a, axis=[1, 2])
+        a = tf.reduce_mean(a, axis=[1, 2], name="avg_pool")
         #self.pre_final = tf.multiply(self.pre_final, tf.reshape(a, [-1,1,1,64]))
         #self.pre_final = tf.contrib.layers.flatten(self.pre_final)
         self.act_tups = tf.concat(self.act_tups, axis=1)
+        #self.pre_final = tf.greater(a, 0)
 
         with tf.variable_scope('fc'):
-            self.logits = self._fc(a)
+            self.logits, self.fc_weights = self._fc(a)
 
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=self.logits)
         self.sm_loss = tf.reduce_mean(cross_entropy)
@@ -87,7 +88,7 @@ class Resnet:
         vec_predictions = tf.nn.softmax(self.logits)
         predictions = tf.argmax(vec_predictions, axis=1, output_type=tf.int32)
         was_correct = tf.equal(predictions, self.labels)
-        return self.act_tups, predictions, self.labels, was_correct
+        return self.act_tups, predictions, self.labels, was_correct #self.get_final_target_weights()
 
     def inference_and_pre_final(self):
         return self.logits, self.act_tups
@@ -95,8 +96,9 @@ class Resnet:
     def just_sm_loss(self):
         return self.sm_loss
 
-    def loss(self):
-        return self.loss
+    def get_final_target_weights(self):
+        return tf.gather(tf.transpose(self.fc_weights), self.labels)
+
 
 
     def _stack(self, a, stack, scope_name):
@@ -135,8 +137,9 @@ class Resnet:
             if skip is not None:
                 a = a + skip
         a = tf.nn.relu(a)
-        act_tup = tf.greater(a, 0.0)
-        act_tup = tf.contrib.layers.flatten(act_tup)
+        act_tup = tf.reduce_mean(tf.cast(tf.greater(a, 0.0), dtype=tf.float32), axis=[1, 2])
+        #act_tup = tf.greater(a, 0.0)
+        #act_tup = tf.contrib.layers.flatten(act_tup)
         self.act_tups.append(act_tup)
         return a
 
@@ -148,6 +151,8 @@ class Resnet:
                                 shape=shape,
                                 initializer=initializer,
                                 weight_decay=CONV_WEIGHT_DECAY)
+        weight_reg = tf.nn.l2_loss(weights)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, weight_reg)
         return tf.nn.conv2d(x, weights, [1, stride, stride, 1], padding='SAME')
 
     def _max_pool(self, x, ksize=3, stride=2):
@@ -210,7 +215,7 @@ class Resnet:
         a = tf.nn.xw_plus_b(a, weights, biases)
         weight_reg = tf.nn.l2_loss(weights)
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, weight_reg)
-        return a
+        return a, weights
 
     def _get_variable(self, name,
                       shape,

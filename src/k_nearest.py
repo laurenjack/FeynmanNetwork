@@ -2,6 +2,21 @@ import tensorflow as tf
 import numpy as np
 
 
+class TrainCounter:
+
+    def __init__(self, k, all_hidden):
+        self.k = k
+        self.train_acts = tf.placeholder(tf.bool, shape=[None, all_hidden], name="train_avgs")
+        self.test_point = tf.placeholder(tf.bool, shape=[all_hidden], name="test_point")
+
+    def find_count_dist(self, just_pred_and_correct=False):
+        train_acts_as_float = tf.cast(self.train_acts, tf.float32)
+        train_avgs = tf.reduce_mean(train_acts_as_float, axis=0)
+        test_point_as_float = tf.cast(self.test_point, tf.float32)
+        man_hat_dist = tf.reduce_sum(tf.abs(train_avgs - test_point_as_float))
+        return man_hat_dist
+
+
 class TupleDistanceKNN:
     """Computation graph that computes nearest neighbour based on tuple distance"""
 
@@ -77,8 +92,9 @@ class KNearest:
         if conf.is_w_pixels:
             dimensions = 784
         else:
-            dimensions = 784 # sum(conf.sizes[1:-1]) + 784
+            dimensions = sum(conf.sizes[1:-1]) #+ 784
         self.KNN = _create_KNearest(conf.k, dimensions, conf.is_binary)
+        self.train_counter = TrainCounter(conf.k, dimensions)
 
     def report_simple_stats(self, sess, prediction, pred_class, final_reg_set):
         """Report the 4 simple statistics as specified in simple_logistic.py for a batch of predictions"""
@@ -131,8 +147,8 @@ class KNearest:
         """
         final_regions = final_reg_set.final_regions
         Ts = final_reg_set.Ts
+        all_targets = final_reg_set.all_targets
         if not self.KNN.is_binary:
-            all_targets = final_reg_set.all_targets
             all_predicted = final_reg_set.all_predicted
             n = len(final_regions)
             feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts,
@@ -147,11 +163,19 @@ class KNearest:
         else:
             feed_dict = {self.KNN.predicted_region: prediction, self.KNN.all_regions: Ts}
 
-        #Get K-Nearest regions
+            #Get K-Nearest regions
             knn_all = self.KNN.distances_and_indices(False)
             distances, nearest_indicies = sess.run(knn_all, feed_dict=feed_dict)
             nearest_regions = [final_regions[i] for i in nearest_indicies]
             avg_dist = np.mean(distances)
+
+            #Get train counter difference
+            fcd = self.train_counter.find_count_dist()
+            inds_of_pred_class = np.argwhere(all_targets == pred_class)[:, 0]
+            Ts = np.array(Ts)
+            train_acts = Ts[inds_of_pred_class]
+            tc_fd = {self.train_counter.train_acts: train_acts, self.train_counter.test_point: prediction}
+            count_dist = sess.run(fcd, feed_dict=tc_fd)
 
 
 
@@ -166,7 +190,7 @@ class KNearest:
                     nearest_instances[target] = InstanceTracker()
                 nearest_instances[target].increment(target == predicted)
 
-        return nearest_instances, nearest_regions, distances, avg_dist #avg_dist_pc
+        return nearest_instances, nearest_regions, distances, avg_dist, count_dist #avg_dist_pc
 
 class InstanceTracker:
 

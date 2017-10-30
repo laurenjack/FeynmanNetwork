@@ -30,7 +30,7 @@ def _plot_image(im_vector, sub_num):
     sub_plot.imshow(im_vector.reshape(28, 28), interpolation='nearest')
 
 
-def show_neighbouring_instances_conv(kn_result):
+def show_neighbouring_instances_conv(kn_result, cc_dists):
     #Creat dictionary of targets to count of correct/incorrect
     nearest_targets = kn_result.nearest_targets
     k = nearest_targets.shape[0]
@@ -48,13 +48,18 @@ def show_neighbouring_instances_conv(kn_result):
     target = kn_result.target
     prediction = kn_result.prediction
     avg_distance = kn_result.avg_distance
-    _print_neighbours(k, kn_result)
+    print "Next CC distances:"
+    print cc_dists
+    print ""
+    #_print_neighbours(k, kn_result)
     _display_kn_bars(nearest_map, target, prediction, avg_distance)
 
 
 
-def show_neighbouring_instances(nearest_instances, predicted, target, nearest_regions, distances, avg_dist_pc):
+def show_neighbouring_instances(nearest_instances, predicted, target, nearest_regions, distances, avg_dist_pc, count_dist=None):
     # Print the details fo each nearby region
+    if count_dist is not None:
+        print "COUTN DIST: "+str(count_dist)
     _print_regions(nearest_regions, distances)
     _display_kn_bars(nearest_instances, target, predicted, avg_dist_pc)
 
@@ -82,7 +87,7 @@ def _display_kn_bars(nearest_map, target, predicted, avg_dist):
 
 def _print_regions(nearest_regions, similarilties):
     """Print the nearest neighbours in order of how far they are from the current prediction"""
-    print ""
+    print "NEXT INSTANCE:"
     for i in xrange(len(nearest_regions)):
         reg = nearest_regions[i]
         sim = similarilties[i]

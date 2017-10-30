@@ -119,7 +119,6 @@ def _random_batch(batch_indicies, m):
 from activation_tuples import TupleSetBuilder
 
 def create_rsb(conf):
-    if conf.is_binary:
-        return RegionSetBuilder(conf)
+    # if conf.is_binary:
+    #     return RegionSetBuilder(conf)
     return TupleSetBuilder(conf)
-

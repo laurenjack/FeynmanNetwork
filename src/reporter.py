@@ -11,9 +11,10 @@ class Reporter:
         """Given a data set, feed"""
         #Iterate over batches and produce Prediction results
         batch_indicies = np.arange(sample_size)
-        all_pre_final = np.zeros((sample_size, 303104), dtype=np.bool)
+        all_pre_final = np.zeros((sample_size, 1136), dtype=np.float32)
         all_predictions = np.zeros(sample_size)
-        all_was_correct = np.zeros(sample_size, dtype=np.bool_)
+        all_was_correct = np.zeros(sample_size, dtype=np.bool)
+        all_ftws = np.zeros((sample_size, 1136), dtype=np.float32)
 
         pred = self.resnet.prediction_result()
         for k in xrange(0, sample_size, self.m):
@@ -21,12 +22,13 @@ class Reporter:
             x = all_images[batch]
             y = all_targets[batch]
             pre_final, predictions, targets, was_correct =\
-                sess.run(pred, {self.resnet.is_training: True, self.resnet.images: x, self.resnet.labels: y})
+                sess.run(pred, {self.resnet.is_training: False, self.resnet.images: x, self.resnet.labels: y})
             all_pre_final[batch] = pre_final
             all_predictions[batch] = predictions
             all_was_correct[batch] = was_correct
+            #all_ftws[batch] = ftws
         prediction_result = PredictionResult(all_pre_final, all_predictions, all_targets, all_was_correct)
-        return prediction_result
+        return prediction_result, all_ftws
 
 
     def _concat(self, prediction_results):

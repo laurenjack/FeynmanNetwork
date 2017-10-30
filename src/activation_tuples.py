@@ -84,8 +84,8 @@ class RealTupleSet:
         self.Ts = [at.acts for at in activation_tuples]
         self.final_regions = activation_tuples
         n = len(activation_tuples)
-        self.all_targets = np.zeros(n)
-        self.all_predicted = np.zeros(n)
+        self.all_targets = np.zeros(n, dtype=np.int32)
+        self.all_predicted = np.zeros(n, dtype=np.int32)
         for i in xrange(n):
             pred = activation_tuples[i].predictions[0]
             self.all_targets[i] = pred.target

@@ -13,7 +13,7 @@ from six.moves import urllib
 
 DATA_URL = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('data_dir', '/tmp/cifar-data',
+tf.app.flags.DEFINE_string('data_dir', '/home/laurenjack/models/cifar-data',
                            'where to store the dataset')
 
 TRAIN_FILES = [os.path.join(FLAGS.data_dir, 'cifar-10-batches-bin', 'data_batch_' + `j + 1` + '.bin') for j in xrange(5)]
