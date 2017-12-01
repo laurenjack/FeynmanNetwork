@@ -33,7 +33,8 @@ class FeedForward:
         # Create softmax layer for classification
         self.z = a_out
         l = len(self.sizes) - 2
-        self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
+        self.a_out = self._rbf_final_layer(self.sizes[-2], self.sizes[-1], a_out, l)
+        #self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
 
         with tf.device("/cpu:0"):
             self.predictions = tf.argmax(self.a_out, axis=1)
@@ -66,6 +67,9 @@ class FeedForward:
     def train(self):
         train_op = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cross_entropy)
         return train_op
+
+    def predictions_probs(self):
+        return self.a_out
 
     def fgsm_adverserial_example(self):
         """Generate an adverserial example according to the fast
@@ -108,6 +112,16 @@ class FeedForward:
         z = tf.add(tf.matmul(a_in, W), b)
         a_out = act_func(z)
         return a_out
+
+    def _rbf_final_layer(self, s_in, s_out, a_in, l):
+        w_name = "W" + str(l)
+        W = tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
+        x_bar = tf.get_variable('x_bar', shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
+        x_diff_sq = tf.square(tf.multiply(tf.reshape(W, [1, s_in, s_out]), tf.reshape(a_in, [-1, s_in, 1])) - tf.reshape(x_bar, [1, s_in, s_out]))
+        dist = tf.reduce_sum(x_diff_sq, axis=1)
+        rbf = 10.0 * tf.exp(-dist)
+        self.Ws.append(W)
+        return tf.nn.softmax(rbf)
 
     def _scale_regions(self):
         sm_W = self.Ws[-1]

@@ -13,7 +13,7 @@ from k_nearest import KNearest
 sizes = [784, 784, 784, 10]
 learning_rate = 0.01
 m = 20
-epochs = 20
+epochs = 25
 conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.05, is_binary=True, is_w_pixels=False)#/255.0)
 network = FeedForward(conf)
 X = conf.X

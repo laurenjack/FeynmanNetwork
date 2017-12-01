@@ -90,6 +90,16 @@ def report(trained_network, X, Y, conf, sess):
     print "Region Building Complete."
     return rsb.get_forest()
 
+def report_predictions(trained_network, X, Y, conf, sess):
+    """Report the predictions probs on a a given data set"""
+    pred_probs_op = trained_network.predictions_probs()
+    feed_dict = {trained_network.x: X, trained_network.y: Y}
+    probs = sess.run(pred_probs_op, feed_dict=feed_dict)
+    m = Y.shape[0]
+    for i in xrange(m):
+        print "Target: "+str(np.argmax(Y[i]))+"   Predictions: "+str(probs[i])
+
+
 def gen_adverserial_examples(network, X, Y, conf, sess):
     """Generate an advererial counter-part for each image in X"""
     n = X.shape[0]

@@ -2,19 +2,37 @@ import tensorflow as tf
 import numpy as np
 
 
+# class TrainCounter:
+#
+#     def __init__(self, k, all_hidden):
+#         self.k = k
+#         self.train_acts = tf.placeholder(tf.bool, shape=[None, all_hidden], name="train_avgs")
+#         self.test_point = tf.placeholder(tf.bool, shape=[all_hidden], name="test_point")
+#
+#     def find_count_dist(self, just_pred_and_correct=False):
+#         train_acts_as_float = tf.cast(self.train_acts, tf.float32)
+#         train_avgs = tf.reduce_mean(train_acts_as_float, axis=0)
+#         test_point_as_float = tf.cast(self.test_point, tf.float32)
+#         man_hat_dist = tf.reduce_sum(tf.abs(train_avgs - test_point_as_float))
+#         return man_hat_dist
+
 class TrainCounter:
 
     def __init__(self, k, all_hidden):
         self.k = k
-        self.train_acts = tf.placeholder(tf.bool, shape=[None, all_hidden], name="train_avgs")
-        self.test_point = tf.placeholder(tf.bool, shape=[all_hidden], name="test_point")
+        self.class_clusters = [tf.placeholder(tf.bool, shape=[None, all_hidden], name="cluster"+str(i)) for i in xrange(10)]
+        self.test_point = tf.placeholder(tf.bool, shape=[all_hidden], name="tc_test_point")
 
-    def find_count_dist(self, just_pred_and_correct=False):
-        train_acts_as_float = tf.cast(self.train_acts, tf.float32)
-        train_avgs = tf.reduce_mean(train_acts_as_float, axis=0)
-        test_point_as_float = tf.cast(self.test_point, tf.float32)
-        man_hat_dist = tf.reduce_sum(tf.abs(train_avgs - test_point_as_float))
-        return man_hat_dist
+    def find_count_dist(self):
+        bin_dists = []
+        for cc in self.class_clusters:
+            p = tf.reduce_mean(tf.cast(cc, tf.float32), axis=0)
+            most_likely = tf.greater(p, 0.5)
+            most_likely_as_float = tf.cast(most_likely, tf.float32)
+            test_point_as_float = tf.cast(self.test_point, tf.float32)
+            man_hat_dist = tf.reduce_sum(tf.abs(most_likely_as_float - test_point_as_float))
+            bin_dists.append(man_hat_dist)
+        return bin_dists
 
 
 class TupleDistanceKNN:
@@ -191,6 +209,21 @@ class KNearest:
                 nearest_instances[target].increment(target == predicted)
 
         return nearest_instances, nearest_regions, distances, avg_dist, count_dist #avg_dist_pc
+
+    def report_centre_distances(self, sess, tc_fd, test_point):
+        tc_fd[self.train_counter.test_point] = test_point
+        tc_op = self.train_counter.find_count_dist()
+        return sess.run(tc_op, tc_fd)
+
+    def _form_class_cluster(self, train_region_set):
+        co_act_tups = []
+        train_points = train_region_set.Ts
+        train_targets = train_region_set.all_targets
+        for i in xrange(10):
+            inds_of_class_i = np.argwhere(train_targets == i)[:, 0]
+            co_act_tups.append(train_points[inds_of_class_i])
+        return co_act_tups
+
 
 class InstanceTracker:
 
