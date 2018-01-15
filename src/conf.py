@@ -3,7 +3,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 class Config:
 
-    def __init__(self, sizes, learning_rate, m, epochs, feyn_lr=0.01, feyn_epochs=20, k=10, epsilon=0.25, is_binary=True, is_w_pixels=False):
+    def __init__(self, sizes, learning_rate, m, epochs, feyn_lr=0.01, feyn_epochs=20, k=10, epsilon=0.25, is_binary=True, is_w_pixels=False, is_rbf=False):
         self.sizes = sizes
         self.learning_rate = learning_rate
         self.m = m
@@ -14,6 +14,8 @@ class Config:
         self.epsilon = epsilon
         self.is_binary = is_binary
         self.is_w_pixels = is_w_pixels
+        self.is_rbf = is_rbf
+        self.NETWORK_GLOBAL = 0
 
         mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
         train_set = mnist.train
@@ -25,11 +27,14 @@ class Config:
 
 class ConfBuilder:
 
+    def __init__(self):
+        self.is_rbf_soft = False
+
     def build(self):
         return ResConfig(self.num_classes, self.image_dims, self.train_dir, self.n,
             self.lr, self.lr_reduce_factor, self.lr_reduce_steps, self.momentum, self.m, self.max_steps, self.num_filter_list,
                self.num_block_list, self.pp_k_size, self.pp_stride, self.has_mp, self.k_size,
-               self.f_stride, self.stride, self.adv_epsilon, self.k, self.s)
+               self.f_stride, self.stride, self.adv_epsilon, self.k, self.s, self.is_rbf_soft)
 
 
 class ResConfig:
@@ -37,7 +42,7 @@ class ResConfig:
     def __init__(self, num_classes, image_dims, train_dir, n,
                  lr, lr_reduce_factor, lr_reduce_steps, momentum, m, max_steps, num_filter_list,
                  num_block_list, pp_k_size, pp_stride, has_mp, k_size,
-                 f_stride, stride, adv_epsilon, k, s):
+                 f_stride, stride, adv_epsilon, k, s, is_rbf_soft):
         if len(num_filter_list) - 1 != len(num_block_list):
             raise ValueError("First num block is explicitly specified, so need one less element than num_filter_list")
 
@@ -65,6 +70,7 @@ class ResConfig:
         self.adv_epsilon = adv_epsilon
         self.k = k
         self.s = s
+        self.is_rbf_soft = is_rbf_soft
 
 
 

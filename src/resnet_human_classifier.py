@@ -3,7 +3,7 @@ import numpy as np
 import visualisation as vis
 import sys
 import cifar
-from convnet import Resnet
+from resnet import Resnet
 from reporter import Reporter
 from conv_k_nearest import DistanceComputer, KNearest, TrainCounter, KNearestInfo
 

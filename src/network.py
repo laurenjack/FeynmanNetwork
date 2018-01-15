@@ -1,11 +1,13 @@
 import tensorflow as tf
 import numpy as np
 
+
 class FeedForward:
     """A standard feed-forward neural network, with an operation provided to store each of its
     active linear regions and their properties"""
 
-    def __init__(self, conf):
+    def __init__(self, conf, NET_GLOBAL):
+        self.NET_GLOBAL = NET_GLOBAL
         self.sizes = conf.sizes
         self.learning_rate = conf.learning_rate
         self.epsilon = conf.epsilon
@@ -13,10 +15,10 @@ class FeedForward:
         self.is_binary = conf.is_binary
         self.is_w_pixels = conf.is_w_pixels
         in_dim = self.sizes[0]
-        out_dim = self.sizes[-1]
+        self.out_dim = self.sizes[-1]
         # Create place holder for inputs and target outputs
         self.x = tf.placeholder(tf.float32, shape=[None, in_dim], name="inputs")
-        self.y = tf.placeholder(tf.float32, shape=[None, out_dim], name="target_outputs")
+        self.y = tf.placeholder(tf.float32, shape=[None, self.out_dim], name="target_outputs")
 
         #Create the network
         self.Ws = []
@@ -33,8 +35,10 @@ class FeedForward:
         # Create softmax layer for classification
         self.z = a_out
         l = len(self.sizes) - 2
-        self.a_out = self._rbf_final_layer(self.sizes[-2], self.sizes[-1], a_out, l)
-        #self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
+        if conf.is_rbf:
+            self.a_out = self._rbf_final_layer(self.sizes[-2], self.sizes[-1], a_out, l)
+        else:
+            self.a_out = self._create_layer(self.sizes[-2], self.sizes[-1], a_out, l, act_func=tf.nn.softmax)
 
         with tf.device("/cpu:0"):
             self.predictions = tf.argmax(self.a_out, axis=1)
@@ -58,15 +62,18 @@ class FeedForward:
 
         #Create the cost function
         # TODO train for zero too
-        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out) + (1.0 - self.y) * tf.log(1.0 - self.a_out + 10 ** -10.0), reduction_indices=[1]))
+        self.rbf_entro = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out), reduction_indices=[1]))
+        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out + 10 ** -10.0), reduction_indices=[1])) #+ (1.0 - self.y) * tf.log(1.0 - self.a_out + 10 ** -50.0)
+        self.train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-08).minimize(self.cross_entropy)
+        self.NET_GLOBAL.inc()
 
 
     def feed_forward(self):
         return self.a_out, self.T
 
     def train(self):
-        train_op = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cross_entropy)
-        return train_op
+        #train_op = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cross_entropy)
+        return self.train_op
 
     def predictions_probs(self):
         return self.a_out
@@ -74,10 +81,27 @@ class FeedForward:
     def fgsm_adverserial_example(self):
         """Generate an adverserial example according to the fast
         gradient sign method (Goodfellow 2015)"""
-        image_grads = tf.gradients(self.cross_entropy, self.x)[0]
+        image_grads = self.adverserial_grad()
         grad_signs = tf.sign(image_grads)
         pertubation = tf.multiply(self.epsilon, grad_signs)
         return image_grads, grad_signs, pertubation, tf.add(self.x, pertubation)
+
+    def adverserial_grad(self):
+        return tf.gradients(self.cross_entropy, self.x)[0]
+
+    def adverserial_rbf_grad(self):
+        return tf.gradients(self.rbf_entro, self.x)[0]
+
+    # def adverserial_train_to_other(self):
+    #     """Used to train a batch of inputs to match another target"""
+    #     batch_inds = tf.reshape(tf.range(self.out_dim), [self.out_dim, 1])
+    #     rel_inds = tf.concatenate([batch_inds, tf.reshape(self.y, [self.out_dim, 1]))
+    #     grad = self.adverserial_grad()
+    #     rel_probs = tfself.a_out
+    #     probs = sess.run(probs_op, feed_dict)
+    #     # Get the probablilities only for y other
+    #     rel_probs = probs[ind_of_relevant_prob]
+    #     mask = np.greater(rel_probs, thresh).astype(dtype=np.float32)
 
 
     def accuracy(self):
@@ -99,8 +123,8 @@ class FeedForward:
 
     def _create_layer(self, s_in, s_out, a_in, l, act_func=tf.nn.relu):
         #name the parameters
-        w_name = "W" + str(l)
-        b_name = "b" + str(l)
+        w_name = "W" + str(l)+"_"+str(self.NET_GLOBAL.count)
+        b_name = "b" + str(l)+"_"+str(self.NET_GLOBAL.count)
 
         #Create parameters
         W = tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
@@ -110,18 +134,71 @@ class FeedForward:
 
         #Apply the weighted sum and activation
         z = tf.add(tf.matmul(a_in, W), b)
-        a_out = act_func(z)
-        return a_out
+        if act_func is not None:
+            z = act_func(z)
+        return z
 
     def _rbf_final_layer(self, s_in, s_out, a_in, l):
-        w_name = "W" + str(l)
-        W = tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
+        lin_layer = self._create_layer(s_in, s_in, a_in, l, act_func=None)
+        w_name = "W" + str(l+1)+"_"+str(self.NET_GLOBAL.count)
+        W = tf.abs(tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())) ** 0.5
         x_bar = tf.get_variable('x_bar', shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
-        x_diff_sq = tf.square(tf.multiply(tf.reshape(W, [1, s_in, s_out]), tf.reshape(a_in, [-1, s_in, 1])) - tf.reshape(x_bar, [1, s_in, s_out]))
+        x_diff_sq = tf.square(tf.multiply(tf.reshape(W ** 2.0, [1, s_in, s_out]), tf.reshape(lin_layer, [-1, s_in, 1])) - tf.reshape(x_bar, [1, s_in, s_out]))
         dist = tf.reduce_sum(x_diff_sq, axis=1)
-        rbf = 10.0 * tf.exp(-dist)
+        self.rbf = 10.0 * tf.exp(-dist)
         self.Ws.append(W)
-        return tf.nn.softmax(rbf)
+        self.x_bar = x_bar
+        self.rbf_W = W
+        return tf.nn.softmax(self.rbf)
+
+    def max_rbf(self):
+        return self.rbf_entro
+
+
+    def get_final_layer_params(self):
+        return self.rbf_W, self.x_bar
+
+    def get_pre_rbf(self):
+        return self.z
+
+    # def _bn(self, x):
+    #     x_shape = x.get_shape()
+    #     params_shape = x_shape[-1:]
+    #     axis = list(range(len(x_shape) - 1))
+    #
+    #     beta = self._get_variable('beta',
+    #                               params_shape,
+    #                               initializer=tf.zeros_initializer)
+    #     gamma = self._get_variable('gamma',
+    #                                params_shape,
+    #                                initializer=tf.ones_initializer)
+    #
+    #     moving_mean = self._get_variable('moving_mean',
+    #                                      params_shape,
+    #                                      initializer=tf.zeros_initializer,
+    #                                      trainable=False)
+    #     moving_variance = self._get_variable('moving_variance',
+    #                                          params_shape,
+    #                                          initializer=tf.ones_initializer,
+    #                                          trainable=False)
+    #
+    #     # These ops will only be preformed when training.
+    #     mean, variance = tf.nn.moments(x, axis)
+    #     update_moving_mean = moving_averages.assign_moving_average(moving_mean,
+    #                                                                mean, BN_DECAY)
+    #     update_moving_variance = moving_averages.assign_moving_average(
+    #         moving_variance, variance, BN_DECAY)
+    #     tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_mean)
+    #     tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_variance)
+    #
+    #     mean, variance = control_flow_ops.cond(
+    #         self.is_training, lambda: (mean, variance),
+    #         lambda: (moving_mean, moving_variance))
+    #
+    #     x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
+    #     # x.set_shape(inputs.get_shape()) ??
+    #
+    #     return x
 
     def _scale_regions(self):
         sm_W = self.Ws[-1]

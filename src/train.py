@@ -2,6 +2,9 @@ import numpy as np
 import tensorflow as tf
 from linear_regions import *
 from activation_tuples import *
+from network import FeedForward
+from conf import Config
+import visualisation as vis
 #from tensorflow.python import debug as tf_debug
 
 def train_and_report(network, X, Y, conf):
@@ -102,6 +105,7 @@ def report_predictions(trained_network, X, Y, conf, sess):
 
 def gen_adverserial_examples(network, X, Y, conf, sess):
     """Generate an advererial counter-part for each image in X"""
+    X = np.copy(X)
     n = X.shape[0]
     m = conf.m
     adverserial_op = network.fgsm_adverserial_example()
@@ -115,6 +119,79 @@ def gen_adverserial_examples(network, X, Y, conf, sess):
         a, b, c, ad_x = sess.run(adverserial_op, feed_dict=feed_dict)
         ad_xs.append(ad_x)
     return np.concatenate(ad_xs)
+
+def to_other_class_adverseries(network, x, y_other, sess, ad_lr= 1.5, thresh=0.9, max_epochs=300):
+    """Takes a batch of examples, with true targets y, and creates adverseries of class y_other.
+    Each example x[i] is trained using adam, to change the networks prediction from y[i] to y_other[i].
+    The training stops when p(y_other[i]) >= thresh."""
+    x = np.copy(x)
+    adv_grad_op = network.adverserial_rbf_grad() #network.adverserial_grad()
+    probs_op = network.predictions_probs()
+    m = x.shape[0]
+    #batch_ind = np.arange(m)
+    #ind_of_relevant_prob = [batch_ind, np.argmax(y_other, axis=1)]
+    ind_of_relevant_prob = np.argmax(y_other, axis=1)
+    #feed_dict = {network.y: y_other}
+    feed_dict = {}
+    mask = np.ones(m)
+    e = 0
+    not_thresh = True
+    while not_thresh and e < max_epochs:
+        not_thresh = False
+        for i in xrange(m):
+            feed_dict[network.x] = x[i].reshape(1, 784)
+            feed_dict[network.y] = y_other[i].reshape(1, 10)
+            grad = sess.run(adv_grad_op, feed_dict=feed_dict)[0]
+            probs = sess.run(probs_op, feed_dict)[0]
+            #Get the probablilities only for y other
+            rel_prob = probs[ind_of_relevant_prob[i]]
+            #mask[i] = np.less_equal(rel_prob, thresh).astype(dtype=np.float32)
+            #masked_grad = np.sign(grad) * mask.reshape(m, 1)
+            under_thresh = np.less_equal(rel_prob, thresh)
+            if under_thresh:
+                #normed_grad = np.sign(grad)
+                normed_grad = grad / (np.sum(grad ** 2.0, axis=0) ** 0.5 + 10.0 ** -30) #.reshape(1, 784) #* mask.reshape(m, 1)
+                x[i] -= (ad_lr*normed_grad)
+                not_thresh = True
+        e += 1
+    return x
+
+def gen_black_box_adverseries(num_adv, NET_GLOBAL):
+    sizes = [784, 100, 10]
+    learning_rate = 0.001
+    m = 20
+    epochs = 20
+    conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.25, is_binary=True,
+                  is_w_pixels=False)  # /255.0)
+    network = FeedForward(conf, NET_GLOBAL)
+    X = conf.X
+    Y = conf.Y
+
+    sess = tf.InteractiveSession()
+    tf.global_variables_initializer().run()
+
+    # Train the network
+    train(network, X, Y, m, epochs, sess)
+
+    X_val = conf.X_val
+    Y_val = conf.Y_val
+    #np.random.shuffle(X_val)
+    #np.random.shuffle(Y_val)
+
+    # test the adverserial examples
+    #n = X.shape[0]
+    val_n = X_val.shape[0]
+
+    rand_inds = np.random.choice(np.arange(val_n), size=num_adv, replace=False)
+    X_sub = X_val[rand_inds]
+    adv_Y = Y_val[rand_inds]
+    # print adv_Y
+    # vis.show_original_vs_adv(X_sub, X_sub)
+    adv_X = gen_adverserial_examples(network, X_sub, adv_Y, conf, sess)
+    # print adv_Y
+    # vis.show_original_vs_adv(X_sub, adv_X)
+    return adv_X, X_sub, adv_Y
+
 
 
 def run_k_nearest():
@@ -132,3 +209,4 @@ def create_rsb(conf):
     # if conf.is_binary:
     #     return RegionSetBuilder(conf)
     return TupleSetBuilder(conf)
+

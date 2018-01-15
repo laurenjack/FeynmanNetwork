@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from convnet import *
+from resnet import *
 
 import datetime
 import numpy as np

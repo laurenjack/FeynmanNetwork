@@ -1,5 +1,5 @@
 from conf import *
-from convnet import *
+from resnet import *
 from train_resnet import *
 import cifar
 import resnet_human_classifier as hc
