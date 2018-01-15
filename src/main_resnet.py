@@ -1,6 +1,7 @@
 from conf import *
 from resnet import *
 from train_resnet import *
+from prediction_probs import *
 import cifar
 import resnet_human_classifier as hc
 
@@ -64,7 +65,8 @@ if is_network_train:
     #Train the network
     train(resnet, conf)
 else:
+    report_prediction_probs(conf, is_training, global_step)
     #Load the latest network, and perform k_nearest inference
-    hc.run(conf, is_training, global_step)
+    #hc.run(conf, is_training, global_step)
 
 
