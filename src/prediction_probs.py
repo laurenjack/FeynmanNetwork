@@ -5,7 +5,7 @@ import sys
 import cifar
 from resnet import Resnet
 
-def report_prediction_probs(conf, is_training, global_step):
+def report_prediction_probs(conf, is_training, global_step, x_bar):
     train_dir = conf.train_dir
     im_dim = conf.image_dims
     num_classes = conf.num_classes
@@ -55,12 +55,12 @@ def report_prediction_probs(conf, is_training, global_step):
     val_inds = rand_inds[s:]
     x_test_samp = x_test[val_inds]
     y_test_samp = y_test[val_inds]
-    val_dict = {resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
+    val_dict = {resnet.x_bar: x_bar, resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
 
     # Create adverserial examples based on the validation set
     x_adv = x_test[advs_inds]
     y_adv = y_test[advs_inds]
-    adv_dict = {resnet.is_training: False, images: x_adv, targets: y_adv}
+    adv_dict = {resnet.x_bar: x_bar, resnet.is_training: False, images: x_adv, targets: y_adv}
     x_adv = sess.run(adv_op, feed_dict=adv_dict)
     #Replace with perturbed images
     adv_dict[images] = x_adv
@@ -68,39 +68,16 @@ def report_prediction_probs(conf, is_training, global_step):
     #Report predictions of the val set
     val_prediction_probs = sess.run(pp_op, feed_dict=val_dict)
     print "Val prediction probs:"
-    print val_prediction_probs
+    print _report(y_test_samp, val_prediction_probs)
     print ""
 
     # Report predictions of the adverserial set
     adv_prediction_probs = sess.run(pp_op, feed_dict=adv_dict)
     print "Adverserial prediction probs:"
-    print adv_prediction_probs
+    print _report(y_adv, adv_prediction_probs)
 
-    # # Report on the training set
-    # train_prs, _ = rep.report_full_ds(x, y, sess, n)
-    # print "Training set reported on"
-    #
-    # # Report on s test set instances
-    # x_test_samp = x_test[val_inds]
-    # y_test_samp = y_test[val_inds]
-    # test_prs, _ = rep.report_full_ds(x_test_samp, y_test_samp, sess, s)
-    #
-    # # Report on the s adverserial examples
-    # adv_prs, _ = rep.report_full_ds(x_adv, y_adv, sess, s)
-    # print "Validation and adverserial samples reported on"
-
-    # Create sets by class on training set
-    class_organised = _form_class_cluster(train_prs, num_classes)
-
-    # K nearest
-    knrs_validation, tc_val = _k_nearest_for_each(k_nearest, kn_op, dc, dc_op, sess, train_prs, test_prs, tc, tc_op,
-                                                  class_organised)  # ftws)
-    knrs_adverserial, tc_adv = _k_nearest_for_each(k_nearest, kn_op, dc, dc_op, sess, train_prs, adv_prs, tc, tc_op,
-                                                   class_organised)  # ftws)
-    print "K Nearest complete"
-
-    # Pass off to visualisation component
-    print "Visualising validation samples"
-    _visualise_all(knrs_validation, tc_val)
-    print "Visualising adverseries"
-    _visualise_all(knrs_adverserial, tc_adv)
+def _report(targets, predictions):
+    #targets = np.argmax(targets, axis=1)
+    s = targets.shape[0]
+    for i in xrange(s):
+        print "Target: "+str(targets[i])+"    Prediction: "+str(predictions[i])

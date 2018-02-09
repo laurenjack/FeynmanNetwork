@@ -2,12 +2,16 @@ from conf import *
 from resnet import *
 from train_resnet import *
 from prediction_probs import *
+from intersection_diagnostics import *
 import cifar
 import resnet_human_classifier as hc
 
 conf = ConfBuilder()
 
 is_network_train = False
+conf.is_rbf_soft = True
+
+np.set_printoptions(precision=2, suppress=True)
 
 #tf.set_random_seed(653712155)
 #np.random.seed(65331165)
@@ -19,11 +23,15 @@ conf.train_dir = '/home/laurenjack/models'
 conf.n = 50000
 
 #Training parameters
-conf.lr = 0.1
+conf.lr = 0.001
 conf.lr_reduce_factor = 0.1
 conf.lr_reduce_steps = [32000, 48000]
 conf.momentum = 0.9
 conf.m = 128
+#Report m (batch_size) used for when we want to report on the entire data set (usually invlolves)
+#iterating over the entire thing once. Hence it is simply a number configured to conform to the size
+#of the training set
+conf.reporting_m = 200
 # conf.epochs = 100
 conf.max_steps = 64000
 
@@ -40,7 +48,7 @@ conf.adv_epsilon = 0.01
 
 #Accuary prediction params
 conf.k = 10
-conf.s = 5
+conf.s = 20
 
 conf = conf.build()
 
@@ -63,9 +71,10 @@ if is_network_train:
     resnet = Resnet(conf, is_training, global_step, images, labels)
 
     #Train the network
-    train(resnet, conf)
+    x_bar = train(resnet, conf)
 else:
-    report_prediction_probs(conf, is_training, global_step)
+    #x_bar_vs_centre_resnet(conf, is_training, global_step)
+    report_prediction_probs(conf, is_training, global_step, x_bar)
     #Load the latest network, and perform k_nearest inference
     #hc.run(conf, is_training, global_step)
 

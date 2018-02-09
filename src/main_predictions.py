@@ -4,7 +4,7 @@ from conf import Config
 import feynman_classifier
 import human_classifer
 import visualisation as vis
-import rbf_intersection as ri
+import intersection_diagnostics as ri
 
 np.set_printoptions(precision=2, suppress=True)
 
@@ -23,8 +23,8 @@ class Counter:
         self.count += 1
 
 NET_GLOBAL = Counter()
-sizes = [784, 100, 10]
-learning_rate = 0.01
+sizes = [784, 500, 10]
+learning_rate = 0.003
 m = 20
 epochs = 20
 num_adv = 20

@@ -57,7 +57,8 @@ def train(resnet, conf):
 
     #tf.summary.scalar('learning_rate', lr)
 
-    opt = tf.train.MomentumOptimizer(lr_tensor, momentum)
+    #opt = tf.train.MomentumOptimizer(lr_tensor, momentum)
+    opt = tf.train.AdamOptimizer(learning_rate=lr_tensor, beta1=0.9, beta2=0.999, epsilon=1e-08)
     grads = opt.compute_gradients(loss_)
     for grad, var in grads:
         if grad is not None and not FLAGS.minimal_summaries:
@@ -100,11 +101,18 @@ def train(resnet, conf):
     # c2 = actual_images[3, :, :, 1]
     # c3 = actual_images[3, :, :, 2]
 
+    z_d = conf.stacks[-1].in_d
+    #x_bar_shape = (z_d, conf.num_classes)
+    x_bar = np.random.randn(z_d, conf.num_classes) / float(z_d)
+    x_bar = x_bar.astype(np.float32)
+    per_class_sample_counts = np.zeros(conf.num_classes).astype(np.float32)
+
+
     for x in xrange(conf.max_steps + 1):
         start_time = time.time()
 
         step = sess.run(resnet.global_step)
-        i = [train_op, loss_]
+        i = [train_op, loss_, resnet.z_and_labels()]
 
         write_summary = step % 100 and step > 1
         if write_summary:
@@ -113,7 +121,9 @@ def train(resnet, conf):
         if x in lr_reduce_steps:
             lr *= lr_reduce_factor
 
-        o = sess.run(i, {resnet.is_training: True, lr_tensor: lr})
+        o = sess.run(i, {resnet.x_bar: x_bar, resnet.is_training: True, lr_tensor: lr})
+
+
 
         loss_value = o[1]
 
@@ -128,7 +138,7 @@ def train(resnet, conf):
             print(format_str % (step, loss_value, examples_per_sec, duration))
 
         if write_summary:
-            summary_str = o[2]
+            summary_str = o[3]
             summary_writer.add_summary(summary_str, step)
 
         # Save the model checkpoint periodically.
@@ -138,8 +148,47 @@ def train(resnet, conf):
 
         # Run validation periodically
         if step > 1 and step % 100 == 0:
-            _, top1_error_value = sess.run([val_op, top1_error], { resnet.is_training: False })
+            _, top1_error_value = sess.run([val_op, top1_error], {resnet.x_bar: x_bar, resnet.is_training: False })
             print('Validation top1 error %.2f' % top1_error_value)
+            
+
+def update_x_bar(x_bar, labels, zs, num_class, e, per_class_sample_counts):
+    """Note: This is a non tensorflow function"""
+    #First epoch, careful calculation of sample counts required
+    if e == 0:
+        for t in xrange(num_class):
+            inds_of_t = np.argwhere(labels == t)[:, 0]
+            x_bar_for_t = x_bar[:, t]
+            z_for_t = zs[inds_of_t]
+    else:
+        for t in xrange(num_class):
+            inds_of_t = np.argwhere(labels == t)[:, 0]
+            x_bar_for_t = x_bar[:, t]
+            z_for_t = zs[inds_of_t]
+
+
+   # #Adam params
+   #  b1 = 0.9
+   #  b2 = 0.999
+   #  ep = 10.0 ** -20
+   #  #Adam variables
+   #  fan_in = conf.stacks[-1].in_d
+   #  x_bar_shape = (fan_in, conf.num_classes)
+   #  x_bar = np.random.randn(fan_in, conf.num_classes) / float(fan_in)
+   #  x_bar = x_bar.astype(np.float32)
+   #  momentum = np.zeros(x_bar_shape)
+   #  v = np.zeros(x_bar_shape)
+
+    # # Perform adam update of x_bar
+    # zs, np_labels = o[2]
+    # dC_dx_bar = resnet.d_centre_dx_bar(x_bar, np_labels, zs, conf.num_classes)
+    # t = step + 1
+    # momentum = b1 * momentum + (1 - b1) * dC_dx_bar
+    # v = b2 * v + (1 - b2) * dC_dx_bar ** 2.0
+    # x_bar -= lr * (1 - b2 ** t) ** 0.5 / (1 - b1 ** t) * momentum / (v ** 0.5 + ep)
+
+
+
 
 
 

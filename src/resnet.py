@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.training import moving_averages
 from reporter import PredictionResult
+import numpy as np
 
 
 MOVING_AVERAGE_DECAY = 0.9997
@@ -42,6 +43,7 @@ class Resnet:
         self.is_rbf_soft = conf.is_rbf_soft
 
         # Build the network
+        self.x_bar = tf.placeholder(dtype=tf.float32, shape=(self.stacks[-1].in_d, self.num_classes), name='x_bar')
         # Construct pre pooling layer
         self.act_tups = []
         a = self._layer(images, self.pp_d, self.pp_k_size, self.pp_stride, 'pre_pool')
@@ -65,8 +67,10 @@ class Resnet:
             self.logits, self.fc_weights = self._fc(a)
 
         if self.is_rbf_soft:
+            self.z = self.logits
             with tf.variable_scope('rbf'):
-                self.logits = self._rbf(self.logits)
+                self.z_d = self.stacks[-1].in_d
+                self.logits = self._rbf(self.logits, self.z_d)
 
 
 
@@ -89,6 +93,17 @@ class Resnet:
         pertubation = tf.multiply(self.adv_epsilon, grad_signs)
         return tf.add(self.images, pertubation)
 
+    def d_centre_dx_bar(self, x_bar, labels, zs, num_class):
+        """Note: This is a non tensorflow function"""
+        dC_dx_bar = np.zeros(x_bar.shape)
+        for t in xrange(num_class):
+            inds_of_t = np.argwhere(labels == t)[:, 0]
+            x_bar_for_t = x_bar[:, t]
+            z_for_t = zs[inds_of_t]
+            dC_dx_bar[:, t] = np.sum(x_bar_for_t - z_for_t, axis=0) / 15.0 #TODO consider a better scaling solution
+        return dC_dx_bar
+
+
     def inference(self):
         return self.logits
 
@@ -109,6 +124,9 @@ class Resnet:
 
     def prediction_probs(self):
         return tf.nn.softmax(logits=self.logits)
+
+    def z_and_labels(self):
+        return self.z, self.labels
 
     def _stack(self, a, stack, scope_name):
         with tf.variable_scope(scope_name):
@@ -212,6 +230,8 @@ class Resnet:
     def _fc(self, a):
         num_units_in = a.get_shape()[1]
         num_units_out = self.num_classes
+        if self.is_rbf_soft:
+            num_units_out = num_units_in
         weights_initializer = tf.contrib.layers.variance_scaling_initializer()
 
         weights = self._get_variable('weights',
@@ -226,32 +246,32 @@ class Resnet:
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, weight_reg)
         return a, weights
 
-    def _rbf(self, lin_fc):
-        num_units_in = lin_fc.get_shape()[1]
+    def _rbf(self, lin_fc, in_d):
+        num_units_in = in_d
         num_units_out = self.num_classes
-        init = tf.contrib.layers.xavier_initializer()
-        W = self._get_variable('sd', shape=[num_units_in, num_units_out],
-                                initializer=init)
-        x_bar = self._get_variable('x_bar', shape=[num_units_in, num_units_out],
-                        initializer=init)
-        x_diff_sq = tf.square(tf.multiply(tf.reshape(W ** 2.0, [1, num_units_in, num_units_out]),
-                        tf.reshape(lin_fc, [-1, num_units_in, 1])) - tf.reshape(x_bar, [1, num_units_in, num_units_out]))
+        #init = tf.contrib.layers.xavier_initializer()
+        self.W = tf.abs(self._get_variable('sd', shape=[num_units_in, num_units_out],
+                                initializer=tf.contrib.layers.variance_scaling_initializer())) ** 0.5
+        #self.x_bar = self._get_variable('x_bar', shape=[num_units_in, num_units_out],
+        #                initializer=tf.contrib.layers.variance_scaling_initializer())
+        x_diff_sq = tf.square(tf.multiply(tf.reshape(self.W ** 2.0, [1, num_units_in, num_units_out]),
+                        tf.reshape(lin_fc, [-1, num_units_in, 1])) - tf.reshape(self.x_bar, [1, num_units_in, num_units_out]))
         dist = tf.reduce_sum(x_diff_sq, axis=1)
         rbf = 10.0 * tf.exp(-dist)
         return rbf
 
-    def _rbf_final_layer(self, s_in, s_out, a_in, l):
-        lin_layer = self._create_layer(s_in, s_in, a_in, l, act_func=None)
-        w_name = "W" + str(l+1)+"_"+str(self.NET_GLOBAL.count)
-        W = tf.abs(tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())) ** 0.5
-        x_bar = tf.get_variable('x_bar', shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
-        x_diff_sq = tf.square(tf.multiply(tf.reshape(W ** 2.0, [1, s_in, s_out]), tf.reshape(lin_layer, [-1, s_in, 1])) - tf.reshape(x_bar, [1, s_in, s_out]))
-        dist = tf.reduce_sum(x_diff_sq, axis=1)
-        self.rbf = 10.0 * tf.exp(-dist)
-        self.Ws.append(W)
-        self.x_bar = x_bar
-        self.rbf_W = W
-        return tf.nn.softmax(self.rbf)
+    # def _rbf_final_layer(self, s_in, s_out, a_in, l):
+    #     lin_layer = self._create_layer(s_in, s_in, a_in, l, act_func=None)
+    #     w_name = "W" + str(l+1)+"_"+str(self.NET_GLOBAL.count)
+    #     W = tf.abs(tf.get_variable(w_name, shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())) ** 0.5
+    #     x_bar = tf.get_variable('x_bar', shape=[s_in, s_out], initializer=tf.contrib.layers.xavier_initializer())
+    #     x_diff_sq = tf.square(tf.multiply(tf.reshape(W ** 2.0, [1, s_in, s_out]), tf.reshape(lin_layer, [-1, s_in, 1])) - tf.reshape(x_bar, [1, s_in, s_out]))
+    #     dist = tf.reduce_sum(x_diff_sq, axis=1)
+    #     self.rbf = 10.0 * tf.exp(-dist)
+    #     self.Ws.append(W)
+    #     self.x_bar = x_bar
+    #     self.rbf_W = W
+    #     return tf.nn.softmax(self.rbf)
 
     def _get_variable(self, name,
                       shape,
