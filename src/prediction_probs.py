@@ -5,8 +5,8 @@ import sys
 import cifar
 from resnet import Resnet
 
-def report_prediction_probs(conf, is_training, global_step, x_bar):
-    train_dir = conf.train_dir
+def report_prediction_probs(conf, is_training, global_step):
+    train_dir = conf.out_dir
     im_dim = conf.image_dims
     num_classes = conf.num_classes
     k = conf.k
@@ -19,6 +19,7 @@ def report_prediction_probs(conf, is_training, global_step, x_bar):
     #rep = Reporter(conf, resnet)
     adv_op = resnet.fgsm_adverserial_example()
     pp_op = resnet.prediction_probs()
+    #load_x_bar_op = resnet.x_bar_save
     # dc = DistanceComputer()
     # dc_op = dc.distances()
     # k_nearest = KNearest()
@@ -41,6 +42,9 @@ def report_prediction_probs(conf, is_training, global_step, x_bar):
     print "resume", latest
     saver.restore(sess, latest)
 
+    #Load the stored x_bar
+    #x_bar = sess.run(load_x_bar_op, feed_dict={is_training: False})
+
     # Load Cifar 10, training and test set, images and labels
     cifar10 = cifar.Cifar10()
     train, test = cifar10.load_full_np()
@@ -55,12 +59,12 @@ def report_prediction_probs(conf, is_training, global_step, x_bar):
     val_inds = rand_inds[s:]
     x_test_samp = x_test[val_inds]
     y_test_samp = y_test[val_inds]
-    val_dict = {resnet.x_bar: x_bar, resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
+    val_dict = {resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
 
     # Create adverserial examples based on the validation set
     x_adv = x_test[advs_inds]
     y_adv = y_test[advs_inds]
-    adv_dict = {resnet.x_bar: x_bar, resnet.is_training: False, images: x_adv, targets: y_adv}
+    adv_dict = {resnet.is_training: False, images: x_adv, targets: y_adv}
     x_adv = sess.run(adv_op, feed_dict=adv_dict)
     #Replace with perturbed images
     adv_dict[images] = x_adv

@@ -5,7 +5,7 @@ from resnet import Resnet
 import sys
 import cifar
 
-def x_bar_vs_centre_resnet(conf, is_training, global_step, x_bar):
+def x_bar_vs_centre_resnet(conf, is_training, global_step):
     train_dir = conf.train_dir
     im_dim = conf.image_dims
     num_classes = conf.num_classes

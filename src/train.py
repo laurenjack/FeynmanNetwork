@@ -19,6 +19,7 @@ def train_and_report(network, X, Y, conf):
     n = X.shape[0]
     m = conf.m
     epochs = conf.epochs
+    log_dir = conf.log_dir
 
     batch_indicies = _create_batch_indicies(n)
     sess = tf.InteractiveSession()
@@ -29,7 +30,7 @@ def train_and_report(network, X, Y, conf):
     #acc_op = network.accuracy()
 
     #Train network
-    train(network, X, Y, m, epochs, sess)
+    train(network, X, Y, m, epochs, sess, log_dir)
 
     #Report on the number of linear regions
     rsb = create_rsb(conf)
@@ -46,15 +47,30 @@ def train_and_report(network, X, Y, conf):
 
 
 
-def train(network, X, Y, m, epochs, sess, sub_set_report=1000, is_feyn=False):
+def train(network, X, Y, m, epochs, sess, log_dir, sub_set_report=1000, is_feyn=False):
     n = X.shape[0]
     batch_indicies = _create_batch_indicies(n)
 
-    train_op = network.train()
+    opt = network.opt
+    loss = network.cross_entropy
+
+    grads = opt.compute_gradients(loss)
+    for grad, var in grads:
+        if grad is not None and log_dir is not None:
+            tf.summary.histogram(var.op.name + '/gradients', grad)
+    apply_gradient_op = opt.apply_gradients(grads)
+
+    for var in tf.trainable_variables():
+        tf.summary.histogram(var.op.name, var)
+
+    summary_op = tf.summary.merge_all()
+    summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
+
     acc_op = network.accuracy()
     wb = network.wb()
 
     # Train network
+    step = 1
     for epoch in xrange(epochs):
         np.random.shuffle(batch_indicies)
         for k in xrange(0, n, m):
@@ -63,10 +79,14 @@ def train(network, X, Y, m, epochs, sess, sub_set_report=1000, is_feyn=False):
             y = Y[batch]
             feed_dict = {network.x: x, network.y: y}
             # a = sess.run(feed_forward, feed_dict=feed_dict)
-            sess.run(train_op, feed_dict=feed_dict)
+            _, summary_res = sess.run([apply_gradient_op, summary_op], feed_dict=feed_dict)
+            summary_writer.add_summary(summary_res, step)
             if is_feyn:
-                w, b = sess.run(wb, feed_dict=feed_dict)
-                print "W: "+str(w)+"b: "+str(b)
+                w, b, x_bar = sess.run(wb, feed_dict=feed_dict)
+                delta_w = w - prev_w
+                prev_w = w
+                #print "W: "+str(w)+"b: "+str(b)
+            step += 1
         eval_batch = _random_batch(batch_indicies, sub_set_report)
         x = X[eval_batch]
         y = Y[eval_batch]
@@ -209,4 +229,5 @@ def create_rsb(conf):
     # if conf.is_binary:
     #     return RegionSetBuilder(conf)
     return TupleSetBuilder(conf)
+
 

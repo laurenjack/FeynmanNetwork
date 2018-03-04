@@ -19,11 +19,12 @@ class Counter:
 
 NET_GLOBAL = Counter()
 
-sizes = [784, 100, 10]
+sizes = [784, 64, 10]
 learning_rate = 0.001
 m = 20
 epochs = 20
-conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.05, is_binary=True, is_w_pixels=False)#/255.0)
+conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.05, is_binary=True,
+              is_w_pixels=False, is_rbf=True, log_dir='/home/laurenjack/mnist_logs')#/255.0)
 network = FeedForward(conf, NET_GLOBAL)
 X = conf.X
 Y = conf.Y

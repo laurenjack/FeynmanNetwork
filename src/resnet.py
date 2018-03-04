@@ -24,6 +24,7 @@ class Resnet:
     def __init__(self, conf, is_training, global_step, images, labels):
         #The network
         self.num_classes = conf.num_classes
+        m = conf.m
         self.image_dims = conf.image_dims
         self.stacks = conf.stacks
 
@@ -41,9 +42,15 @@ class Resnet:
         self.labels = labels
 
         self.is_rbf_soft = conf.is_rbf_soft
+        self.conv_weights = []
+        #Indicator for training
+        self.Ind = tf.placeholder(dtype=tf.float32, shape=[])
 
         # Build the network
-        self.x_bar = tf.placeholder(dtype=tf.float32, shape=(self.stacks[-1].in_d, self.num_classes), name='x_bar')
+        #self.x_bar = tf.placeholder(dtype=tf.float32, shape=(self.stacks[-1].in_d, self.num_classes), name='x_bar')
+        # x_bar updated outside of tensorflow, but need to store it for later use
+        #self.x_bar_save = tf.get_variable(name='x_bar_save', shape=(self.stacks[-1].in_d, self.num_classes),
+        #                       initializer=tf.zeros_initializer(), dtype=tf.float32)
         # Construct pre pooling layer
         self.act_tups = []
         a = self._layer(images, self.pp_d, self.pp_k_size, self.pp_stride, 'pre_pool')
@@ -67,6 +74,7 @@ class Resnet:
             self.logits, self.fc_weights = self._fc(a)
 
         if self.is_rbf_soft:
+            self.labels_const = tf.constant(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
             self.z = self.logits
             with tf.variable_scope('rbf'):
                 self.z_d = self.stacks[-1].in_d
@@ -74,14 +82,15 @@ class Resnet:
 
 
 
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=self.logits)
-        self.sm_loss = tf.reduce_mean(cross_entropy)
+        self.sm_loss = self._softmax_and_cost(self.labels, self.logits)
+
+        self.generated_loss = self.Ind * self._generated_loss(m)
 
         reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         decay_lr = tf.train.exponential_decay(0.0002, global_step, 480000, 0.2, True)
         reg_losses = [tf.multiply(decay_lr, reg_loss) for reg_loss in reg_losses]
 
-        self.loss = tf.add_n([self.sm_loss] + reg_losses)
+        self.loss = tf.add_n([self.sm_loss, self.generated_loss] + reg_losses)
         tf.summary.scalar('loss', self.loss)
 
 
@@ -93,16 +102,18 @@ class Resnet:
         pertubation = tf.multiply(self.adv_epsilon, grad_signs)
         return tf.add(self.images, pertubation)
 
-    def d_centre_dx_bar(self, x_bar, labels, zs, num_class):
-        """Note: This is a non tensorflow function"""
-        dC_dx_bar = np.zeros(x_bar.shape)
-        for t in xrange(num_class):
-            inds_of_t = np.argwhere(labels == t)[:, 0]
-            x_bar_for_t = x_bar[:, t]
-            z_for_t = zs[inds_of_t]
-            dC_dx_bar[:, t] = np.sum(x_bar_for_t - z_for_t, axis=0) / 15.0 #TODO consider a better scaling solution
-        return dC_dx_bar
+    # def d_centre_dx_bar(self, x_bar, labels, zs, num_class):
+    #     """Note: This is a non tensorflow function"""
+    #     dC_dx_bar = np.zeros(x_bar.shape)
+    #     for t in xrange(num_class):
+    #         inds_of_t = np.argwhere(labels == t)[:, 0]
+    #         x_bar_for_t = x_bar[:, t]
+    #         z_for_t = zs[inds_of_t]
+    #         dC_dx_bar[:, t] = np.sum(x_bar_for_t - z_for_t, axis=0) / 15.0 #TODO consider a better scaling solution
+    #     return dC_dx_bar
 
+    # def save_x_bar(self):
+    #     return tf.assign(self.x_bar_save, self.x_bar)
 
     def inference(self):
         return self.logits
@@ -125,8 +136,16 @@ class Resnet:
     def prediction_probs(self):
         return tf.nn.softmax(logits=self.logits)
 
-    def z_and_labels(self):
-        return self.z, self.labels
+    def _generated_loss(self, m):
+        self.gen_zs = tf.placeholder(dtype=tf.float32, shape=[m, self.z_d], name='gen_zs')
+        self.labels_for_gen = tf.placeholder(dtype=tf.int32, shape=[m])
+        rbf = self._rbf(self.gen_zs, self.z_d)
+        return self._softmax_and_cost(self.labels_for_gen, rbf)
+
+
+
+    # def z_and_labels(self):
+    #     return self.z, self.labels, tf.nn.softmax(self.logits), self.W ** 2.0, self.conv_weights[0], self.conv_weights[-1]
 
     def _stack(self, a, stack, scope_name):
         with tf.variable_scope(scope_name):
@@ -180,6 +199,7 @@ class Resnet:
                                 weight_decay=CONV_WEIGHT_DECAY)
         weight_reg = tf.nn.l2_loss(weights)
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, weight_reg)
+        self.conv_weights.append(weights)
         return tf.nn.conv2d(x, weights, [1, stride, stride, 1], padding='SAME')
 
     def _max_pool(self, x, ksize=3, stride=2):
@@ -252,13 +272,18 @@ class Resnet:
         #init = tf.contrib.layers.xavier_initializer()
         self.W = tf.abs(self._get_variable('sd', shape=[num_units_in, num_units_out],
                                 initializer=tf.contrib.layers.variance_scaling_initializer())) ** 0.5
-        #self.x_bar = self._get_variable('x_bar', shape=[num_units_in, num_units_out],
-        #                initializer=tf.contrib.layers.variance_scaling_initializer())
+        self.x_bar = self._get_variable('x_bar', shape=[num_units_in, num_units_out],
+                        initializer=tf.contrib.layers.variance_scaling_initializer())
         x_diff_sq = tf.square(tf.multiply(tf.reshape(self.W ** 2.0, [1, num_units_in, num_units_out]),
                         tf.reshape(lin_fc, [-1, num_units_in, 1])) - tf.reshape(self.x_bar, [1, num_units_in, num_units_out]))
         dist = tf.reduce_sum(x_diff_sq, axis=1)
         rbf = 10.0 * tf.exp(-dist)
         return rbf
+
+    def _softmax_and_cost(self, labels, logits):
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+        return tf.reduce_mean(cross_entropy)
+
 
     # def _rbf_final_layer(self, s_in, s_out, a_in, l):
     #     lin_layer = self._create_layer(s_in, s_in, a_in, l, act_func=None)

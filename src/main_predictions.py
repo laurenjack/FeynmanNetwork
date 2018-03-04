@@ -23,12 +23,13 @@ class Counter:
         self.count += 1
 
 NET_GLOBAL = Counter()
-sizes = [784, 500, 10]
-learning_rate = 0.003
+sizes = [784, 64, 10]
+learning_rate = 0.001
 m = 20
 epochs = 20
 num_adv = 20
-conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.25, is_binary=True, is_w_pixels=False, is_rbf=True)#/255.0)
+conf = Config(sizes, learning_rate, m, epochs, feyn_lr=0.05, feyn_epochs=100, k=15, epsilon=0.25, is_binary=True,
+              is_w_pixels=False, is_rbf=True, log_dir='/home/laurenjack/mnist_logs')#/255.0)
 network = FeedForward(conf, NET_GLOBAL)
 X = conf.X
 Y = conf.Y
@@ -40,7 +41,7 @@ tf.global_variables_initializer().run()
 init_W, init_x_bar = f_layer_params(network, sess)
 
 #Train the network
-train(network, X, Y, m, epochs, sess)
+train(network, X, Y, m, epochs, sess, conf.log_dir)
 
 # See the final rbf wieghts and x_bars
 final_W, final_x_bar = f_layer_params(network, sess)

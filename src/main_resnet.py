@@ -8,7 +8,8 @@ import resnet_human_classifier as hc
 
 conf = ConfBuilder()
 
-is_network_train = False
+is_network_train = True
+resume = False
 conf.is_rbf_soft = True
 
 np.set_printoptions(precision=2, suppress=True)
@@ -19,13 +20,14 @@ np.set_printoptions(precision=2, suppress=True)
 #Data_params
 conf.num_classes = 10
 conf.image_dims = 32
-conf.train_dir = '/home/laurenjack/models'
+conf.in_dir = '/home/laurenjack/models2'
+conf.out_dir = conf.in_dir  #'/home/laurenjack/out_dir'
 conf.n = 50000
 
 #Training parameters
 conf.lr = 0.001
 conf.lr_reduce_factor = 0.1
-conf.lr_reduce_steps = [32000, 48000]
+conf.lr_reduce_steps = [32000, 48000, 74000]
 conf.momentum = 0.9
 conf.m = 128
 #Report m (batch_size) used for when we want to report on the entire data set (usually invlolves)
@@ -33,7 +35,7 @@ conf.m = 128
 #of the training set
 conf.reporting_m = 200
 # conf.epochs = 100
-conf.max_steps = 64000
+conf.max_steps = 1000
 
 #Network Structural parameters
 conf.num_filter_list = [16, 16, 32, 64]
@@ -48,7 +50,7 @@ conf.adv_epsilon = 0.01
 
 #Accuary prediction params
 conf.k = 10
-conf.s = 20
+conf.s = 50
 
 conf = conf.build()
 
@@ -71,10 +73,10 @@ if is_network_train:
     resnet = Resnet(conf, is_training, global_step, images, labels)
 
     #Train the network
-    x_bar = train(resnet, conf)
+    x_bar = train(resnet, conf, resume)
 else:
     #x_bar_vs_centre_resnet(conf, is_training, global_step)
-    report_prediction_probs(conf, is_training, global_step, x_bar)
+    report_prediction_probs(conf, is_training, global_step)
     #Load the latest network, and perform k_nearest inference
     #hc.run(conf, is_training, global_step)
 

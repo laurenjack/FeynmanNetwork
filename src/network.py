@@ -64,7 +64,8 @@ class FeedForward:
         # TODO train for zero too
         self.rbf_entro = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out), reduction_indices=[1]))
         self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(self.y * tf.log(self.a_out + 10 ** -10.0), reduction_indices=[1])) #+ (1.0 - self.y) * tf.log(1.0 - self.a_out + 10 ** -50.0)
-        self.train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-08).minimize(self.cross_entropy)
+        self.opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-08)
+        self.train_op = self.opt.minimize(self.cross_entropy)
         self.NET_GLOBAL.inc()
 
 
@@ -110,7 +111,7 @@ class FeedForward:
         return tf.reduce_mean(tf.cast(is_correct, tf.float32)), self.z, self.a_out
 
     def wb(self):
-        return None, None
+        return self.Ws[0], self.bs[0], self.x_bar
 
     def get_inaccurate_indicies(self):
         a, T = self.feed_forward()
