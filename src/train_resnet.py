@@ -62,34 +62,17 @@ def train(resnet, conf, resume):
     val_op = tf.group(val_step.assign_add(1), ema.apply([top1_error]))
     top1_error_avg = ema.average(top1_error)
     tf.summary.scalar('val_top1_error_avg', top1_error_avg)
-
     #tf.summary.scalar('learning_rate', lr)
 
     #opt = tf.train.MomentumOptimizer(lr_tensor, momentum)
     opt = tf.train.AdamOptimizer(learning_rate=lr_tensor, beta1=0.9, beta2=0.999, epsilon=1e-30, name='Adam')
     opt_gen = tf.train.AdamOptimizer(learning_rate=lr_tensor, beta1=0.9, beta2=0.999, epsilon=1e-30)
     grads = opt.compute_gradients(loss_)
-    grads_generated = opt_gen.compute_gradients(generated_loss)
-    new_grads = []
-    new_gen_grads = []
-    for i in xrange(len(grads_training_set)):
-        grad, var = grads_training_set[i]
-        gen_grad, _ = grads_generated[i]
-        use_gen_grads = _use_generated_grads(resnet.global_step, conf.max_steps, var)
-        if grad is not None:
-            new_grad = tf.cond(use_gen_grads, lambda: 0.0*grad, lambda: grad)
-            new_gen_grad = tf.zeros(tf.shape(var))
-            display_grad = new_grad
-        else:
-            new_grad = tf.zeros(tf.shape(var))
-            new_gen_grad = tf.cond(use_gen_grads, lambda: gen_grad, lambda: 0.0*gen_grad)
-            display_grad = new_gen_grad
-        new_grads.append((new_grad, var))
-        new_gen_grads.append((new_gen_grad, var))
-        if display_grad is not None and not FLAGS.minimal_summaries:
-            tf.summary.histogram(var.op.name + '/gradients', display_grad)
-    apply_gradient_op = opt.apply_gradients(new_grads, global_step=resnet.global_step)
-    apply_gen_gradient_op = opt_gen.apply_gradients(new_gen_grads, global_step=resnet.global_step)
+    for i in xrange(len(grads)):
+        grad, var = grads[i]
+        if grad is not None and not FLAGS.minimal_summaries:
+            tf.summary.histogram(var.op.name + '/gradients', grad)
+    apply_gradient_op = opt.apply_gradients(grads, global_step=resnet.global_step)
 
     if not FLAGS.minimal_summaries:
         # Display the training images in the visualizer.
@@ -101,7 +84,6 @@ def train(resnet, conf, resume):
     batchnorm_updates = tf.get_collection(UPDATE_OPS_COLLECTION)
     batchnorm_updates_op = tf.group(*batchnorm_updates)
     train_op = tf.group(apply_gradient_op, batchnorm_updates_op)
-    train_gen_op = tf.group(apply_gen_gradient_op, batchnorm_updates_op)
 
     #x_bar_save_op = resnet.save_x_bar()
     saver = tf.train.Saver(tf.global_variables())
@@ -137,7 +119,7 @@ def train(resnet, conf, resume):
     # x_bar = np.random.randn(z_d, conf.num_classes) / float(z_d)
     # x_bar = x_bar.astype(np.float32)
 
-    for x in xrange(conf.max_steps + 1 + 500):
+    for x in xrange(conf.max_steps):
         start_time = time.time()
 
 
@@ -151,34 +133,31 @@ def train(resnet, conf, resume):
         if x in lr_reduce_steps:
             lr *= lr_reduce_factor
 
-        if x >= conf.max_steps:
-            if train_gen_op not in i:
-                i.append(train_gen_op)
-            #Retrieve tau and x_bar for outside network generation (if we did in network, it would train based
-            #on the generation process, not what we want
-            z_d = resnet.z_d
-            tau, x_bar = sess.run([tau_op, x_bar_op])
-            all_labels = np.array(reduce(lambda a, b: a+b, [[j] * 20 for j in xrange(10)])).astype(np.int32)
-            indicies = np.arange(20*num_class)
-            chosen_indicies = np.random.choice(indicies, size=m, replace=False)
-            standard_normals = np.random.randn(20, z_d, num_class)
-            tau = abs(tau.reshape(1, z_d, conf.num_classes))
-            x_bar.reshape(1, z_d, conf.num_classes)
-            gen_zs_classwise = x_bar + 1.0 / tau * standard_normals
-            gen_zs_trans = gen_zs_classwise.transpose(0,2,1)
-            gen_zs_flattened = gen_zs_trans.reshape(20*num_class, z_d)
-            gen_zs = gen_zs_flattened[chosen_indicies]
-            labels = all_labels[chosen_indicies]
-            #Put gend zs in network and train accordingly
-            o = sess.run(i, {resnet.is_training: True, lr_tensor: lr, resnet.gen_zs: gen_zs, resnet.labels_for_gen: labels})
-        else:
-            fake_zs = np.ones((128, 64)).astype(dtype=np.float32)
-            fake_labels = np.ones(m).astype(dtype=np.int32)
-            o = sess.run(i, {resnet.is_training: True, lr_tensor: lr, resnet.gen_zs: fake_zs, resnet.labels_for_gen: fake_labels})
+        #Retrieve tau and x_bar for outside network generation (if we did in network, it would train based
+        #on the generation process, not what we want
+        z_d = resnet.z_d
+        tau, x_bar = sess.run([tau_op, x_bar_op])
+        all_labels = np.array(reduce(lambda a, b: a+b, [[j] * 20 for j in xrange(10)])).astype(np.int32)
+        indicies = np.arange(20*num_class)
+        chosen_indicies = np.random.choice(indicies, size=m, replace=False)
+        standard_normals = np.random.randn(20, z_d, num_class)
+        tau = abs(tau.reshape(1, z_d, conf.num_classes))
+        x_bar.reshape(1, z_d, conf.num_classes)
+        gen_zs_classwise = x_bar + 1.0 / tau * standard_normals
+        gen_zs_trans = gen_zs_classwise.transpose(0,2,1)
+        gen_zs_flattened = gen_zs_trans.reshape(20*num_class, z_d)
+        gen_zs = gen_zs_flattened[chosen_indicies]
+        labels = all_labels[chosen_indicies]
+        #Put gend zs in network and train accordingly
+        o = sess.run(i, {resnet.is_training: True, resnet.Ind: 0.1, lr_tensor: lr, resnet.gen_zs: gen_zs, resnet.labels_for_gen: labels})
+        # else:
+        #     fake_zs = np.ones((128, 64)).astype(dtype=np.float32)
+        #     fake_labels = np.ones(m).astype(dtype=np.int32)
+        #     o = sess.run(i, {resnet.is_training: True, resnet.Ind: 0.0, lr_tensor: lr, resnet.gen_zs: fake_zs, resnet.labels_for_gen: fake_labels})
 
         #Increase lr by one order of mag for lone rbf training
-        if x == conf.max_steps:
-            lr *= 10.0
+        # if x == conf.max_steps:
+        #     lr *= 10.0
 
         loss_value = o[1]
         # _, _, preds, ws, c1, c2 = o[2]

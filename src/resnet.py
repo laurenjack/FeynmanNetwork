@@ -122,7 +122,7 @@ class Resnet:
         vec_predictions = tf.nn.softmax(self.logits)
         predictions = tf.argmax(vec_predictions, axis=1, output_type=tf.int32)
         was_correct = tf.equal(predictions, self.labels)
-        return self.act_tups, predictions, self.labels, was_correct #self.get_final_target_weights()
+        return vec_predictions, predictions, was_correct #self.get_final_target_weights()
 
     def inference_and_pre_final(self):
         return self.logits, self.act_tups

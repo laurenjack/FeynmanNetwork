@@ -8,7 +8,7 @@ import resnet_human_classifier as hc
 
 conf = ConfBuilder()
 
-is_network_train = True
+is_network_train = False
 resume = False
 conf.is_rbf_soft = True
 
@@ -35,7 +35,7 @@ conf.m = 128
 #of the training set
 conf.reporting_m = 200
 # conf.epochs = 100
-conf.max_steps = 1000
+conf.max_steps = 64000
 
 #Network Structural parameters
 conf.num_filter_list = [16, 16, 32, 64]

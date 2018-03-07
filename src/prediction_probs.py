@@ -19,6 +19,7 @@ def report_prediction_probs(conf, is_training, global_step):
     #rep = Reporter(conf, resnet)
     adv_op = resnet.fgsm_adverserial_example()
     pp_op = resnet.prediction_probs()
+    pr_op =resnet.prediction_result()
     #load_x_bar_op = resnet.x_bar_save
     # dc = DistanceComputer()
     # dc_op = dc.distances()
@@ -61,6 +62,22 @@ def report_prediction_probs(conf, is_training, global_step):
     y_test_samp = y_test[val_inds]
     val_dict = {resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
 
+    # Test out training set
+    m = 128
+    total_low = 0
+    inds = np.arange(m)
+    train_dict = {resnet.is_training: False}
+    for i in xrange(0, n, m):
+        train_dict[images] = x[i:i+m]
+        train_dict[targets] = y[i:i+m]
+        pred_probs, preds, _ = sess.run(pr_op, feed_dict=train_dict)
+        if i+m > n:
+            inds = np.arange(n - i)
+        max_probs = pred_probs[inds, preds]
+        is_low = np.where(max_probs <= 0.5, 1, 0)
+        total_low += np.sum(is_low)
+
+
     # Create adverserial examples based on the validation set
     x_adv = x_test[advs_inds]
     y_adv = y_test[advs_inds]
@@ -79,6 +96,8 @@ def report_prediction_probs(conf, is_training, global_step):
     adv_prediction_probs = sess.run(pp_op, feed_dict=adv_dict)
     print "Adverserial prediction probs:"
     print _report(y_adv, adv_prediction_probs)
+
+    print total_low
 
 def _report(targets, predictions):
     #targets = np.argmax(targets, axis=1)
