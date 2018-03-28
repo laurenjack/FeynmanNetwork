@@ -84,6 +84,7 @@ def train(resnet, conf, resume):
     batchnorm_updates = tf.get_collection(UPDATE_OPS_COLLECTION)
     batchnorm_updates_op = tf.group(*batchnorm_updates)
     train_op = tf.group(apply_gradient_op, batchnorm_updates_op)
+    pre_z_and_z_op = resnet.pre_z_and_z()
 
     #x_bar_save_op = resnet.save_x_bar()
     saver = tf.train.Saver(tf.global_variables())
@@ -124,7 +125,7 @@ def train(resnet, conf, resume):
 
 
         step = sess.run(resnet.global_step)
-        i = [train_op, loss_, ]
+        i = [train_op, loss_, pre_z_and_z_op]
 
         write_summary = step % 100 and step > 1
         if write_summary:
@@ -149,7 +150,7 @@ def train(resnet, conf, resume):
         gen_zs = gen_zs_flattened[chosen_indicies]
         labels = all_labels[chosen_indicies]
         #Put gend zs in network and train accordingly
-        o = sess.run(i, {resnet.is_training: True, resnet.Ind: 0.1, lr_tensor: lr, resnet.gen_zs: gen_zs, resnet.labels_for_gen: labels})
+        o = sess.run(i, {resnet.is_training: True, resnet.Ind: 0.0, lr_tensor: lr, resnet.gen_zs: gen_zs, resnet.labels_for_gen: labels})
         # else:
         #     fake_zs = np.ones((128, 64)).astype(dtype=np.float32)
         #     fake_labels = np.ones(m).astype(dtype=np.int32)
@@ -160,6 +161,8 @@ def train(resnet, conf, resume):
         #     lr *= 10.0
 
         loss_value = o[1]
+        x_diff, pre_z, pz, pa, pneg_dist, test_grad_tup = o[2]
+        test_grads, test_grads_other = test_grad_tup
         # _, _, preds, ws, c1, c2 = o[2]
         #x_bar = update_x_bar(x_bar, labelss, zss, num_class, m)
 
@@ -174,7 +177,7 @@ def train(resnet, conf, resume):
             print(format_str % (step, loss_value, examples_per_sec, duration))
 
         if write_summary:
-            summary_str = o[2]
+            summary_str = o[3]
             summary_writer.add_summary(summary_str, step)
 
         # Save the model checkpoint periodically.

@@ -4,6 +4,9 @@ import visualisation as vis
 import sys
 import cifar
 from resnet import Resnet
+from write_to_file import *
+from scipy.misc import imsave, imshow
+
 
 def report_prediction_probs(conf, is_training, global_step):
     train_dir = conf.out_dir
@@ -18,8 +21,11 @@ def report_prediction_probs(conf, is_training, global_step):
     resnet = Resnet(conf, is_training, global_step, images, targets)
     #rep = Reporter(conf, resnet)
     adv_op = resnet.fgsm_adverserial_example()
+    #adv_op_z = resnet.fgsm_adv_example_z_space()
     pp_op = resnet.prediction_probs()
-    pr_op =resnet.prediction_result()
+    #pp_op_gen = resnet.prediction_probs_gen()
+    #pr_op =resnet.prediction_result()
+    #labels_and_pre_z_op = resnet.labels_and_pre_z()
     #load_x_bar_op = resnet.x_bar_save
     # dc = DistanceComputer()
     # dc_op = dc.distances()
@@ -62,45 +68,54 @@ def report_prediction_probs(conf, is_training, global_step):
     y_test_samp = y_test[val_inds]
     val_dict = {resnet.is_training: False, images: x_test_samp, targets: y_test_samp}
 
-    # Test out training set
-    m = 128
-    total_low = 0
-    inds = np.arange(m)
-    train_dict = {resnet.is_training: False}
-    for i in xrange(0, n, m):
-        train_dict[images] = x[i:i+m]
-        train_dict[targets] = y[i:i+m]
-        pred_probs, preds, _ = sess.run(pr_op, feed_dict=train_dict)
-        if i+m > n:
-            inds = np.arange(n - i)
-        max_probs = pred_probs[inds, preds]
-        is_low = np.where(max_probs <= 0.5, 1, 0)
-        total_low += np.sum(is_low)
-
+    # Save pre z observations of training set
+    # m = 128
+    # total_low = 0
+    # inds = np.arange(m)
+    # train_dict = {resnet.is_training: False}
+    # all_data = []
+    # for i in xrange(0, n, m):
+    #     train_dict[images] = x[i:i+m]
+    #     train_dict[targets] = y[i:i+m]
+    #     labels, pre_z = sess.run(labels_and_pre_z_op, feed_dict=train_dict)
+    #     labels = labels.astype(np.float32)
+    #     batch_data = np.concatenate([labels, pre_z], axis=1)
+    #     all_data.append(batch_data)
+    #     # if i+m > n:
+    #     #     inds = np.arange(n - i)
+    #     # max_probs = pred_probs[inds, preds]
+    #     # is_low = np.where(max_probs <= 0.5, 1, 0)
+    #     # total_low += np.sum(is_low)
+    # all_data_np = np.concatenate(all_data, axis=0)
+    # csv_writer = CsvWriter()
+    # csv_writer.write_to_csv(all_data_np)
 
     # Create adverserial examples based on the validation set
     x_adv = x_test[advs_inds]
     y_adv = y_test[advs_inds]
     adv_dict = {resnet.is_training: False, images: x_adv, targets: y_adv}
     x_adv = sess.run(adv_op, feed_dict=adv_dict)
+    #z_adv = sess.run(adv_op_z, feed_dict=adv_dict)
     #Replace with perturbed images
     adv_dict[images] = x_adv
+    #adv_dict[resnet.gen_zs] = z_adv
 
     #Report predictions of the val set
-    val_prediction_probs = sess.run(pp_op, feed_dict=val_dict)
+    val_prediction_probs, val_rbf_logits = sess.run(pp_op, feed_dict=val_dict)
     print "Val prediction probs:"
-    print _report(y_test_samp, val_prediction_probs)
+    print _report(y_test_samp, val_prediction_probs, val_rbf_logits, x_test_samp)
     print ""
 
     # Report predictions of the adverserial set
-    adv_prediction_probs = sess.run(pp_op, feed_dict=adv_dict)
+    adv_prediction_probs, adv_rbf_logits = sess.run(pp_op, feed_dict=adv_dict)
+    #adv_prediction_probs = sess.run(pp_op_gen, feed_dict=adv_dict)
     print "Adverserial prediction probs:"
-    print _report(y_adv, adv_prediction_probs)
+    print _report(y_adv, adv_prediction_probs, adv_rbf_logits, x_adv)
 
-    print total_low
-
-def _report(targets, predictions):
+def _report(targets, predictions, rbf_logits, images):
     #targets = np.argmax(targets, axis=1)
     s = targets.shape[0]
     for i in xrange(s):
         print "Target: "+str(targets[i])+"    Prediction: "+str(predictions[i])
+        print "RBF Logits: "+str(rbf_logits[i])
+        print ""

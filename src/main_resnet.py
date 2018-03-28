@@ -8,7 +8,7 @@ import resnet_human_classifier as hc
 
 conf = ConfBuilder()
 
-is_network_train = False
+is_network_train = True
 resume = False
 conf.is_rbf_soft = True
 
@@ -20,7 +20,7 @@ np.set_printoptions(precision=2, suppress=True)
 #Data_params
 conf.num_classes = 10
 conf.image_dims = 32
-conf.in_dir = '/home/laurenjack/models2'
+conf.in_dir = '/home/laurenjack/out_dir7'
 conf.out_dir = conf.in_dir  #'/home/laurenjack/out_dir'
 conf.n = 50000
 
@@ -38,7 +38,7 @@ conf.reporting_m = 200
 conf.max_steps = 64000
 
 #Network Structural parameters
-conf.num_filter_list = [16, 16, 32, 64]
+conf.num_filter_list = [8, 8, 32, 128]
 conf.num_block_list = [5, 5, 5]
 conf.pp_k_size = 3
 conf.pp_stride = 1

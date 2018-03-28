@@ -16,10 +16,12 @@ RESNET_VARIABLES = 'resnet_variables'
 UPDATE_OPS_COLLECTION = 'resnet_update_ops'  # must be grouped with training op
 IMAGENET_MEAN_BGR = [103.062623801, 115.902882574, 123.151630838, ]
 
+
+@tf.RegisterGradient("no_exp_grad")
+def _no_exp_grad(unused_op, grad):
+    return 0.000001 * grad
+
 class Resnet:
-
-
-
 
     def __init__(self, conf, is_training, global_step, images, labels):
         #The network
@@ -60,27 +62,30 @@ class Resnet:
 
         num_stacks = len(self.stacks)
         for stack, i in zip(self.stacks, range(num_stacks)):
+            print reduce(lambda x, y: x * y, [dim.value for dim in a.get_shape()[1:]])
             stack_scope = 'stack' + str(i)
             a = self._stack(a, stack, stack_scope)
 
         # self.pre_final = tf.reduce_sum(a, axis=[1, 2])
-        a = tf.reduce_mean(a, axis=[1, 2], name="avg_pool")
+        self.pre_z = a
+        #a = tf.reduce_mean(a, axis=[1, 2], name="avg_pool")
+        with tf.variable_scope('filter_fc'):
+            a = self._filter_fcs(a)
         #self.pre_final = tf.multiply(self.pre_final, tf.reshape(a, [-1,1,1,64]))
         #self.pre_final = tf.contrib.layers.flatten(self.pre_final)
         self.act_tups = tf.concat(self.act_tups, axis=1)
         #self.pre_final = tf.greater(a, 0)
 
-        with tf.variable_scope('fc'):
-            self.logits, self.fc_weights = self._fc(a)
+        # with tf.variable_scope('fc'):
+        #     self.logits, self.fc_weights = self._fc(a)
 
         if self.is_rbf_soft:
-            self.labels_const = tf.constant(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
-            self.z = self.logits
+            self.z = a
             with tf.variable_scope('rbf'):
-                self.z_d = self.stacks[-1].in_d
-                self.logits = self._rbf(self.logits, self.z_d)
+                self.z_d = a.get_shape()[1].value
+                self.x_diff, self.neg_dist, a, self.test_grad = self._rbf(a, self.z_d)
 
-
+        self.logits = a
 
         self.sm_loss = self._softmax_and_cost(self.labels, self.logits)
 
@@ -101,6 +106,15 @@ class Resnet:
         grad_signs = tf.sign(image_grads)
         pertubation = tf.multiply(self.adv_epsilon, grad_signs)
         return tf.add(self.images, pertubation)
+
+    def fgsm_adv_example_z_space(self):
+        """Generate an adverserial example in the z space, if these can
+        be generated, then there is room for improvement in the z space"""
+        z_grads = tf.gradients(self.sm_loss, self.z)[0]
+        grad_signs = tf.sign(z_grads)
+        pertubation = tf.multiply(self.adv_epsilon, grad_signs)
+        return tf.add(self.z, pertubation)
+
 
     # def d_centre_dx_bar(self, x_bar, labels, zs, num_class):
     #     """Note: This is a non tensorflow function"""
@@ -124,6 +138,13 @@ class Resnet:
         was_correct = tf.equal(predictions, self.labels)
         return vec_predictions, predictions, was_correct #self.get_final_target_weights()
 
+
+    def labels_and_pre_z(self):
+        return tf.reshape(self.labels, [-1, 1]), tf.reshape(self.pre_z, [-1, 4096])
+
+    def pre_z_and_z(self):
+        return self.x_diff[0], self.pre_z[0], self.z[0], self.logits[0], self.neg_dist[0], self.test_grad
+
     def inference_and_pre_final(self):
         return self.logits, self.act_tups
 
@@ -134,13 +155,16 @@ class Resnet:
         return tf.gather(tf.transpose(self.fc_weights), self.labels)
 
     def prediction_probs(self):
-        return tf.nn.softmax(logits=self.logits)
+        return tf.nn.softmax(logits=self.logits), self.logits
+
+    def prediction_probs_gen(self):
+        return tf.nn.softmax(logits=self.rbf_gen)
 
     def _generated_loss(self, m):
-        self.gen_zs = tf.placeholder(dtype=tf.float32, shape=[m, self.z_d], name='gen_zs')
+        self.gen_zs = tf.placeholder(dtype=tf.float32, shape=[None, self.z_d], name='gen_zs')
         self.labels_for_gen = tf.placeholder(dtype=tf.int32, shape=[m])
-        rbf = self._rbf(self.gen_zs, self.z_d)
-        return self._softmax_and_cost(self.labels_for_gen, rbf)
+        _, _, self.rbf_gen, _ = self._rbf(self.gen_zs, self.z_d)
+        return self._softmax_and_cost(self.labels_for_gen, self.rbf_gen)
 
 
 
@@ -158,7 +182,8 @@ class Resnet:
                 with tf.variable_scope("block0"):
                     skip = tf.layers.average_pooling2d(a, 2, 2)  # self._layer(a, stack.in_d, 1, 2, "skip_projection")
                     prev_out = tf.shape(a)[3]
-                    skip = tf.pad(skip, [[0, 0], [0, 0], [0, 0], [prev_out // 2, prev_out // 2]])
+                    pad_amount = (in_d - prev_out) // 2
+                    skip = tf.pad(skip, [[0, 0], [0, 0], [0, 0], [pad_amount, pad_amount]])
                     a = self._layer(a, in_d, stack.k_size, f_stride, "layer_0")
                     a = self._layer(a, in_d, stack.k_size, stack.stride, "layer_1", skip=skip)
             for b in xrange(stack.num_blocks-1):
@@ -266,19 +291,56 @@ class Resnet:
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, weight_reg)
         return a, weights
 
+    def _filter_fcs(self, a):
+        dims = a.get_shape()
+        num_filters = dims[3]
+        num_units_in = dims[1] * dims[2]
+
+        weights_initializer = tf.contrib.layers.variance_scaling_initializer()
+        weights = []
+        biases = []
+        out = []
+        # Create a weight matrix for each filter
+        # Apply filter-wise matrix multiplication
+        a = tf.transpose(a, [3, 0, 1, 2])
+        a = tf.reshape(a, [num_filters.value, -1, num_units_in.value])
+        for i in xrange(num_filters):
+            w = self._get_variable('weights'+str(i),
+                                        shape=[num_units_in, num_units_in],
+                                        initializer=weights_initializer,
+                                        weight_decay=FC_WEIGHT_DECAY)
+            b= self._get_variable('biases'+str(i),
+                                        shape=[num_units_in],
+                                        initializer=tf.zeros_initializer)
+            o = tf.nn.xw_plus_b(a[i], w, b)
+            out.append(o)
+        #w = tf.stack(weights)
+        #b = tf.stack(biases)
+        out = tf.stack(out)
+        out = tf.transpose(out, [1, 0, 2])
+        return tf.reshape(out, [-1, num_filters.value * num_units_in.value])
+
     def _rbf(self, lin_fc, in_d):
         num_units_in = in_d
         num_units_out = self.num_classes
         #init = tf.contrib.layers.xavier_initializer()
         self.W = tf.abs(self._get_variable('sd', shape=[num_units_in, num_units_out],
-                                initializer=tf.contrib.layers.variance_scaling_initializer())) ** 0.5
+                                initializer=tf.contrib.layers.variance_scaling_initializer(factor=1.0)))
         self.x_bar = self._get_variable('x_bar', shape=[num_units_in, num_units_out],
-                        initializer=tf.contrib.layers.variance_scaling_initializer())
-        x_diff_sq = tf.square(tf.multiply(tf.reshape(self.W ** 2.0, [1, num_units_in, num_units_out]),
-                        tf.reshape(lin_fc, [-1, num_units_in, 1])) - tf.reshape(self.x_bar, [1, num_units_in, num_units_out]))
+                        initializer=tf.contrib.layers.variance_scaling_initializer(factor=8192.0))
+        x_diff_sq = tf.multiply(tf.reshape(self.W ** 2.0, [1, num_units_in, num_units_out]),
+                                (tf.reshape(lin_fc, [-1, num_units_in, 1]) - tf.reshape(self.x_bar, [1, num_units_in, num_units_out])) ** 2.0)
         dist = tf.reduce_sum(x_diff_sq, axis=1)
-        rbf = 10.0 * tf.exp(-dist)
-        return rbf
+        neg_dist = tf.negative(dist)
+        g = tf.get_default_graph()
+        #with g.gradient_override_map({'Exp': "no_exp_grad"}):
+        exp = tf.exp(neg_dist, name='Exp')
+        other_exp= tf.exp(neg_dist)
+        rbf = 10.0 * exp
+        test_grads = tf.gradients(rbf, neg_dist)
+        test_grads_other = tf.gradients(other_exp, neg_dist)
+        return x_diff_sq, neg_dist, rbf, (test_grads, test_grads_other)
+
 
     def _softmax_and_cost(self, labels, logits):
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
@@ -318,3 +380,5 @@ class Resnet:
                                regularizer=None,
                                collections=collections,
                                trainable=trainable)
+
+
